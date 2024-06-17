@@ -47,30 +47,45 @@ i2c:
 # Example configuration entry
 text_sensor:
   - platform: homeassistant
+    name: "Jewish Date"
+    entity_id: sensor.jewish_calendar_date
+    id: jdate
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "The current is %s", x.c_str());
+
+  - platform: homeassistant
     name: "Current Parsha"
     entity_id: sensor.jewish_calendar_parshat_hashavua
     id: parsha
     on_value:
       then:
         - lambda: |-
-            ESP_LOGD("main", "The current parsha is %s", x.c_str());
+            ESP_LOGD("main", "HA: %s", x.c_str());
+
   - platform: homeassistant
     name: "Candle Lighting Time"
-    entity_id: sensor.jewish_calendar_upcoming_candle_lighting
+    entity_id: sensor.candle_lighting
     id: candle_lighting
     on_value:
       then:
         - lambda: |-
-            ESP_LOGD("main", "The current Candle Lighting is %s", x.c_str());
+            ESP_LOGD("main", "The current  is %s", x.c_str());
 
+  - platform: homeassistant
+    name: "Havdallah Time"
+    entity_id: sensor.havdallah_time
+    id: havdallah
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "The current Havdallah is %s", x.c_str());
 
 time:
   - platform: homeassistant
     timezone: "Australia/Sydney"
     id: ha_time
-    on_time_sync:
-      then:
-        - logger.log: "Synchronized system clock"
 
 sensor:
   - platform: homeassistant
@@ -78,39 +93,49 @@ sensor:
     entity_id: sensor.switch_box_shelly_channel_a_power
     id: total_power
 
-
-
 display:
   - platform: ssd1306_i2c
     model: "SSD1306 128x64"
     address: 0x3C
+    update_interval: 10s
     lambda: |-
-      char time_s[32];
-      //setenv("TZ", "Australia/Sydney", 1);
-      //tzset();
-      struct tm clt_utc;
-      time_t clt_tm_utc;
-      struct tm clt_lcl;
+      it.printf(0, 0, id(mdi), "\U000F1b04"); // Synagogue
+      it.printf(12, 0, id(alef), "%s", id(jdate).state.c_str());
 
-      // Read candle lighting time into the struct. Reads in as raw UTC
-      // Concert from struct to epoch time, doing time-zone conversion along the way
-      // Now turn it back into the struct
-      ESP_LOGD("main", "Doing strptime: %d", ESPTime::timezone_offset());
-      strptime(id(candle_lighting).state.c_str(), "%Y-%m-%dT%H:%M:%S%z", &clt_utc);
-      ESP_LOGD("main", "Doing mktime");
-      clt_tm_utc = mktime(&clt_utc);
-      ESP_LOGD("main", "Doing localtime");
-      localtime_r(&clt_tm_utc, &clt_lcl);
+      it.printf(0, 14, id(mdi), "\U000F140b"); // Lightning bolt
+      it.printf(12, 15, id(alef), "%4.1fKw", (id(total_power).state / 1000));
+      it.graph(47, 14, id(total_power_graph));
 
-      strftime(time_s, sizeof(time_s), "%H:%M%p+%Z", &clt_lcl);
+      it.printf(0, 25, id(mdi), "\U000F1CCC"); // Book
+      it.printf(12, 26, id(alef), "%s", id(parsha).state.c_str());
 
-      it.print(0, 0, id(alef), "Hello World!");
-      it.printf(0, 10, id(alef), "P: %.2f Kw", (id(total_power).state / 1000));
-      it.printf(0, 12, id(alef), "P: %s", id(parsha).state.c_str());
-      it.printf(0, 14, id(alef), "C: %s", time_s);
-      it.strftime(0, 36, id(alef), "T: %H:%M", id(ha_time).now());
+      it.printf(0, 37, id(mdi), "\U000F05e2"); // Menorah    
+      it.printf(12, 38, id(alef), "%s", id(candle_lighting).state.c_str());
 
+      it.printf(0, 49, id(mdi), "\U000F059b"); // Sunset    
+      it.printf(12, 50, id(alef), "%s", id(havdallah).state.c_str());
+
+graph:
+  # Show bare-minimum auto-ranged graph
+  - id: total_power_graph
+    sensor: total_power
+    duration: 1h
+    width: 65
+    height: 13
+    border: false
+
+# Get codes from: https://pictogrammers.github.io/@mdi/font/7.4.47/
 font:
-  - file: "gfonts://Alef"
+  - file: "gfonts://Roboto"
     id: alef
     size: 10
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: mdi
+    size: 12
+    glyphs:
+      - "\U000F140B" # Lightning bolt
+      - "\U000F05e2" # Menorah
+      - "\U000F059B" # Sunset
+      - "\U000F1B04" # Synagogue
+      - "\U000F097A" # Magen David
+      - "\U000F1CCC" # Book
