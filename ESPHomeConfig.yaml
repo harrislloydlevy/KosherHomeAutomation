@@ -44,7 +44,14 @@ i2c:
   sda: GPIO12
   scl: GPIO14
 
-# Example configuration entry
+# None of these can work direclty off home assistant sensors as they're just text in the UTC timestamp format
+# and zone and the ESP8277 time.h is a PITA. The strptime would randomly add daylihgt savings or not on a
+# static piece of text called every 10 seconds, and there's no function to turn a struct tm into a time_t
+# without doing time-zone change or funnineess.
+#
+# So we setup a bunch of template helpers in home assistant to reformat the times to somethign readonable for us
+# Just add helper > template sensor with the state temoplate something like:
+# {{as_timestamp(states('sensor.jewish_calendar_upcoming_candle_lighting','status')) | timestamp_custom('%-I:%M %p') }}
 text_sensor:
   - platform: homeassistant
     name: "Jewish Date"
