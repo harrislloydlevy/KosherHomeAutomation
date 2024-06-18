@@ -102,18 +102,18 @@ display:
       it.printf(0, 0, id(mdi), "\U000F1b04"); // Synagogue
       it.printf(12, 0, id(alef), "%s", id(jdate).state.c_str());
 
-      it.printf(0, 14, id(mdi), "\U000F140b"); // Lightning bolt
-      it.printf(12, 15, id(alef), "%4.1fKw", (id(total_power).state / 1000));
-      it.graph(47, 14, id(total_power_graph));
+      it.printf(0, 16, id(mdi), "\U000F140b"); // Lightning bolt
+      it.printf(12, 16, id(alef), "%4.1fKw", (id(total_power).state / 1000));
+      it.graph(47, 16, id(total_power_graph));
 
-      it.printf(0, 25, id(mdi), "\U000F1CCC"); // Book
-      it.printf(12, 26, id(alef), "%s", id(parsha).state.c_str());
+      it.printf(0, 27, id(mdi), "\U000F1CCC"); // Book
+      it.printf(12, 28, id(alef), "%s", id(parsha).state.c_str());
 
-      it.printf(0, 37, id(mdi), "\U000F05e2"); // Menorah    
-      it.printf(12, 38, id(alef), "%s", id(candle_lighting).state.c_str());
+      it.printf(0, 39, id(mdi), "\U000F05e2"); // Menorah    
+      it.printf(12, 40, id(alef), "%s", id(candle_lighting).state.c_str());
 
-      it.printf(0, 49, id(mdi), "\U000F059b"); // Sunset    
-      it.printf(12, 50, id(alef), "%s", id(havdallah).state.c_str());
+      it.printf(0, 51, id(mdi), "\U000F059b"); // Sunset    
+      it.printf(12, 52, id(alef), "%s", id(havdallah).state.c_str());
 
 graph:
   # Show bare-minimum auto-ranged graph
