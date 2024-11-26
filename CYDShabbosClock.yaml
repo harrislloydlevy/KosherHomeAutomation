@@ -1,0 +1,311 @@
+# ============================================================ 
+# Edit substitutions for your naming, devices and passwords here.
+#
+# This code assumes you have a climate thermostat entity and a separate temperature sensor. If you want to use the temperature sensor in your thermostat you need to change the code.
+# thermostat_entity: Your climate entity that this device will control.
+# temperature_entity: Your thermometer sensor that measures the current temperature in the room. Only used for graph and display.
+
+substitutions:
+  name: cyd-shabbosclock
+  friendly_name: "CYD ShabbosClock"
+  api_key: !secret api_key
+  ota_password: !secret ota_password
+  ap_password: !secret ap_password
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+
+# ============================================================ 
+# ESPHome YAML start
+#
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Cyd-Screen Fallback Hotspot"
+    password: ${ap_password}
+
+captive_portal:
+
+# Create color scheme
+color:
+  - id: white
+    hex: ffffff
+  - id: ha_blue
+    hex: 18bcf2
+  - id: ha_yellow
+    hex: ffd502
+
+# ============================================================ 
+# Home Assistant related setup
+#
+light:
+# Set up display backlight
+  - platform: monochromatic
+    output: backlight_pwm
+    name: Display Backlight
+    id: backlight
+    restore_mode: ALWAYS_ON
+# Set up LED on the back and turn it off by default
+  - platform: rgb
+    name: RGB
+    id: led
+    red: led_red
+    green: led_green
+    blue: led_blue
+    restore_mode: ALWAYS_OFF
+
+# None of these can work direclty off home assistant sensors as they're just text in the UTC timestamp format
+# and zone and the ESP8277 time.h is a PITA. The strptime would randomly add daylihgt savings or not on a
+# static piece of text called every 10 seconds, and there's no function to turn a struct tm into a time_t
+# without doing time-zone change or funnineess.
+#
+# So we setup a bunch of template helpers in home assistant to reformat the times to somethign readonable for us
+# Just add helper > template sensor with the state temoplate something like:
+# {{as_timestamp(states('sensor.jewish_calendar_upcoming_candle_lighting','status')) | timestamp_custom('%-I:%M %p') }}
+
+sensor:
+# Set up sensor for LDR (light meter)
+  - platform: adc
+    pin: GPIO34
+    id: board_ldr
+    name: "board_ldr"
+    update_interval: 10000ms
+    entity_category: "diagnostic"
+
+# Reports the WiFi signal strength/RSSI in dB
+  - platform: wifi_signal 
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+# Reports the WiFi signal strength in %
+  - platform: copy 
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "Signal %"
+    entity_category: "diagnostic"
+# Reports the light brightness in %
+# TO DO: If we smooth this out, we could use this to auto adjust brightness of backlight?
+# TO DO: Assumes values of 0.075 for full brightness and 0.49 for pitch black, for now - proper values should be tested.
+  - platform: copy 
+    source_id: board_ldr
+    name: "Light Percent"
+    filters:
+      - lambda: return min(max((100 - (((x - 0.075) / (0.49 - 0.075)) * 100)), 0.0), 100.0);
+    unit_of_measurement: "Light %"
+
+  - platform: homeassistant
+    name: "Total Power"
+    entity_id: sensor.switch_box_shelly_channel_a_power
+    id: total_power
+
+
+text_sensor:
+  - platform: homeassistant
+    name: "Jewish Date"
+    entity_id: sensor.jewish_calendar_date
+    id: jdate
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "The current is %s", x.c_str());
+
+  - platform: homeassistant
+    name: "Current Parsha"
+    entity_id: sensor.jewish_calendar_parshat_hashavua
+    id: parsha
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "HA: %s", x.c_str());
+
+  - platform: homeassistant
+    name: "Candle Lighting Time"
+    entity_id: sensor.candle_lighting
+    id: candle_lighting
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "The current  is %s", x.c_str());
+
+  - platform: homeassistant
+    name: "Havdallah Time"
+    entity_id: sensor.havdallah_time
+    id: havdallah
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "The current Havdallah is %s", x.c_str());
+
+time:
+  - platform: homeassistant
+    timezone: "Australia/Sydney"
+    id: ha_time
+
+# ============================================================ 
+# Hardware related setup
+#
+
+# Setup SPI for the display. The ESP32-2432S028R uses separate SPI buses for display and touch
+spi:
+  - id: tft
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+  - id: touch
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+
+# Setup board power switches
+switch:
+  - platform: restart
+    name: "$friendly_name restart"
+  - platform: shutdown
+    name: "$friendly_name shutdown"
+
+# Setup a pin to control the backlight 
+output:
+  - platform: ledc
+    pin: GPIO21
+    id: backlight_pwm
+# Setup channels for the red/green/blue of the LED on the back
+  - platform: ledc
+    pin: GPIO4
+    id: led_red
+    inverted: true
+  - platform: ledc
+    pin: GPIO16
+    id: led_green
+    inverted: true
+  - platform: ledc
+    pin: GPIO17
+    id: led_blue
+    inverted: true
+
+# Setup the ili9xxx platform
+#
+# Display is used as 240x320 by default so we rotate it to 90°
+#
+# We print date and time wth the strftime() function, see the ESPHome documentation to 
+# format date and atime to your locale.
+display:
+  - platform: ili9xxx
+    model: ili9341
+    spi_id: tft
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    invert_colors: false
+    rotation: 90
+
+    # Screen is 320x240
+    # Images are 33 high, and text is around 33 so we lay things out every 40 pixels down
+    lambda: |-
+      it.fill(id(Color::BLACK));
+
+      it.printf(0, 0, id(mdi), "\U000F140b"); // Lightning bolt
+      it.printf(33, 6, id(alef), "%4.1fKw", (id(total_power).state / 1000));
+      it.graph(120, 0, id(total_power_graph));
+
+      it.printf(0, 40, id(mdi), "\U000F1CCC"); // Book
+      it.printf(38, 44, id(alef), "%s", id(parsha).state.c_str());
+
+      it.printf(0, 80, id(mdi), "\U000F05e2"); // Candle
+      it.printf(32, 84, id(alef), "%s", id(candle_lighting).state.c_str());
+
+      it.printf(160, 80, id(mdi), "\U000F059b"); // Sunset    
+      it.printf(192, 84, id(alef), "%s", id(havdallah).state.c_str());
+
+      it.printf(0, 120, id(mdi), "\U000F00EE"); // Blank Calendar
+      it.printf(7, 128, id(mdi_small), "\U000F097A"); // Smaller Magen David in centre of calendar
+      it.printf(32, 122, id(alef), "%s", id(jdate).state.c_str());
+
+      auto red = Color(255, 0, 0);
+      it.filled_rectangle(8, 160, 80, 40);
+
+binary_sensor:
+  # Paging Button to Call Children
+  - platform: touchscreen
+    name: "CallChildren"
+    id: call_children
+    x_min: 0
+    x_max: 80
+    y_min: 160
+    y_max: 200
+
+graph:
+  # Show bare-minimum auto-ranged graph
+  - id: total_power_graph
+    sensor: total_power
+    duration: 1h
+    width: 200
+    height: 36
+    x_grid: 10min
+    border: true
+
+# Set up the xpt2046 touch platform
+touchscreen:
+  platform: xpt2046
+  spi_id: touch
+  cs_pin: GPIO33
+  interrupt_pin: GPIO36
+  update_interval: 50ms
+  on_touch:
+    - lambda: |-
+          ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+              touch.x,
+              touch.y,
+              touch.x_raw,
+              touch.y_raw
+              );
+  threshold: 400
+  calibration:
+      x_min: 400
+      x_max: 3700
+      y_min: 630
+      y_max: 3500
+  transform:
+    swap_xy: true
+
+
+# Get codes from: https://pictogrammers.github.io/@mdi/font/7.4.47/
+font:
+  - file: "gfonts://Roboto"
+    id: alef
+    size: 20
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: mdi
+    size: 32
+    glyphs:
+      - "\U000F140B" # Lightning bolt
+      - "\U000F05e2" # Menorah
+      - "\U000F059B" # Sunset
+      - "\U000F1B04" # Synagogue
+      - "\U000F097A" # Magen David
+      - "\U000F1CCC" # Book
+      - "\U000F00EE" # Empty Calendar
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: mdi_small
+    size: 18
+    glyphs:
+      - "\U000F097A" # Magen David
