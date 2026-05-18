@@ -12,10 +12,19 @@ packages:
 
 http_request:
 
+globals:
+  - id: doc
+    type: JsonDocument
+  - id: geo_id
+    type: int
+    initial_value: '2147714'
+    restore_value: yes 
+
 script:
   - id: get_jdate
     mode: restart
     then:
+      - logger.log: "Getting HebCal data"
       - http_request.get:
             max_response_buffer_size: 8192
             url: !lambda |-
@@ -43,7 +52,7 @@ script:
                                         "s=on&"
                                         "geonameid=%d"
                                         "&start=%04d-%02d-%02d&end=%04d-%02d-%02d";
-                  snprintf(buf, 256, url_fmt, 2147714, time.year, time.month, time.day_of_month, end_time.year, end_time.month, end_time.day_of_month);
+                  snprintf(buf, 256, url_fmt, id(geo_id), time.year, time.month, time.day_of_month, end_time.year, end_time.month, end_time.day_of_month);
                   ESP_LOGI("url", buf);
                   return buf;
             capture_response: true
@@ -57,53 +66,56 @@ script:
                             // Size estimates from: https://arduinojson.org/v6/assistant/#/step1 and doubled.
                             #define JSON_GET(obj, key) ((obj)key | "")
                             #define JSON_DBG(obj, key) ESP_LOGI("json", "%s: %s", #key, JSON_GET(obj, key))
-                            bool printed_date = false;
                             ESP_LOGI("http_body", "Content Length: %d", response->content_length);
                             ESP_LOGI("http_body", "Body Length: %d", body.length());
                             ESP_LOGI("http_body", body.c_str());
-                            JsonDocument doc;
-                            deserializeJson(doc, body);
-                            JSON_DBG(doc, ["location"]["city"]);
-                            JSON_DBG(doc, ["items"][0]["hdate"]);
-
-                            const char *city = JSON_GET(doc, ["location"]["city"]);
-                            const char *hdate = JSON_GET(doc, ["items"][0]["hdate"]);
-
-                            // How is the str_sprintf not a memory leak here? C++ and std::str freaks me out still.
-                            lv_textarea_set_text(head_text, str_sprintf("%s / %s", city, hdate).c_str());
-
-                            // Now we print upcoming events.
-                            JsonArray events = doc["items"];
-
-                            for (JsonObject obj : events ) {
-                              const char *cat = JSON_GET(doc, ["category"]);
-
-                              if (cat == "hebdate" && !printed_date) {
-                                JSON_DBG(obj, ["hdate"]);
-                                const char *hy = JSON_GET(obj, ["heDateParts"]["y"]);
-                                const char *hm = JSON_GET(obj, ["heDateParts"]["m"]);
-                                const char *hd = JSON_GET(obj, ["heDateParts"]["d"]);
-
-                                ESP_LOGI("json", "Hebrew Date %s / %s / %s", hy, hm, hd);
-
-                                printed_date = true;
-                              } else if (cat == "holiday") {
-
-                              } else if (cat == "candles") {
-                              } else if (cat == "havdalah") {
-                              } else if (cat == "parshat") {
-                              }
-
-                            }
+                            deserializeJson(id(doc), body);
+                            JSON_DBG(id(doc), ["location"]["city"]);
+                            JSON_DBG(id(doc), ["items"][0]["hdate"]);
                     else:
                         - logger.log:
                             format: "Error: Response status: %d, message %s"
                             args: [ 'response->status_code', 'body.c_str()' ]
 
+
+  - id: display_jdate
+    mode: restart
+    then:
+      - logger.log: "Writing Update"
+      - lambda: |-
+          bool printed_date = false;
+          const char *city = JSON_GET(id(doc), ["location"]["city"]);
+          const char *hdate = JSON_GET(id(doc), ["items"][0]["hdate"]);
+
+          // How is the str_sprintf not a memory leak here? C++ and std::str freaks me out still.
+          lv_label_set_text(head_text, str_sprintf("%s / %s", city, hdate).c_str());
+
+          // Now we print upcoming events.
+          JsonArray events = id(doc)["items"];
+
+          for (JsonObject obj : events ) {
+            const char *cat = JSON_GET(obj, ["category"]);
+
+            if (cat == "hebdate" && !printed_date) {
+              JSON_DBG(obj, ["hdate"]);
+              const char *hy = JSON_GET(obj, ["heDateParts"]["y"]);
+              const char *hm = JSON_GET(obj, ["heDateParts"]["m"]);
+              const char *hd = JSON_GET(obj, ["heDateParts"]["d"]);
+
+              ESP_LOGI("json", "Hebrew Date %s / %s / %s", hy, hm, hd);
+
+              printed_date = true;
+            } else if (cat == "holiday") {
+            } else if (cat == "candles") {
+            } else if (cat == "havdalah") {
+            } else if (cat == "parshat") {
+            }
+
+          }
+
 # ============================================================ 
 # ESPHome YAML start
 #
-
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
@@ -140,6 +152,9 @@ time:
 lvgl:
   displays: [main_display]
   touchscreens: [main_touchscreen]
+  on_boot:
+    then:
+      - script.execute: display_jdate
   pages:
     - id: main_page
       widgets:
@@ -149,17 +164,24 @@ lvgl:
             y: 8
             text: "ES3C28P Demo"
         - label:
-            id: battery_label
-            align: top_right
-            x: -8
-            y: 8
-            text: "--V"
-        - textarea:
             id: main_text
             align: top_left
-            x: 8
+            x: 0
             y: 32
-          
+            width: 100%
+            text: |-
+              123456789012345678901234567890
+              2
+              3
+              4
+              5
+              6
+              7
+              8
+              9
+              10
+              11
+              12
 
 # gET CODES FROM: https://pictogrammers.github.io/@mdi/font/7.4.47/
 font:
