@@ -87,6 +87,13 @@ script:
           const char *city = JSON_GET(id(doc), ["location"]["city"]);
           const char *hdate = JSON_GET(id(doc), ["items"][0]["hdate"]);
 
+          int item_num = 0;
+          int cur_y=0;
+          std::string icons;
+          std::string content;
+
+          content += " Test ";
+
           // How is the str_sprintf not a memory leak here? C++ and std::str freaks me out still.
           lv_label_set_text(head_text, str_sprintf("%s / %s", city, hdate).c_str());
 
@@ -95,8 +102,9 @@ script:
 
           for (JsonObject obj : events ) {
             const char *cat = JSON_GET(obj, ["category"]);
+            ESP_LOGI("json", "Event %d type = %s", item_num++, cat);
 
-            if (cat == "hebdate" && !printed_date) {
+            if (strcmp(cat,"hebdate") == 0 && !printed_date) {
               JSON_DBG(obj, ["hdate"]);
               const char *hy = JSON_GET(obj, ["heDateParts"]["y"]);
               const char *hm = JSON_GET(obj, ["heDateParts"]["m"]);
@@ -104,14 +112,31 @@ script:
 
               ESP_LOGI("json", "Hebrew Date %s / %s / %s", hy, hm, hd);
 
+              content += hy;
+              content += " / ";
+              content += hm;
+              content += " / ";
+              content += hd;
+              content += '\n';
+
+              // - "\U000F00EE" # Empty Calendar
+              icons += "\U0000F00EE";
+
+
               printed_date = true;
-            } else if (cat == "holiday") {
+            } else if (cat == "holday") {
             } else if (cat == "candles") {
             } else if (cat == "havdalah") {
             } else if (cat == "parshat") {
             }
-
           }
+
+          // BY this point icont_text and main_text should be filled. Now write them to the sscreen
+          ESP_LOGI("screen", "Updating Text Labels");
+          // Again this seems something I shoudl free!
+          lv_label_set_text(main_label, content.c_str());;
+          lv_label_set_text(icon_label, icons.c_str());
+
 
 # ============================================================ 
 # ESPHome YAML start
@@ -119,6 +144,12 @@ script:
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
+  on_boot:
+    - priority: -100
+      then:
+        - logger.log: "Booted Screen"
+        - script.execute: display_jdate
+
 
 logger:
 
@@ -145,16 +176,16 @@ time:
         hours: /12
         then:
           - script.execute: get_jdate
+          - script.execute: display_jdate
     on_time_sync:
       then:
         - script.execute: get_jdate
+        - script.execute: display_jdate
 
 lvgl:
   displays: [main_display]
   touchscreens: [main_touchscreen]
-  on_boot:
-    then:
-      - script.execute: display_jdate
+  rotation: 270
   pages:
     - id: main_page
       widgets:
@@ -164,13 +195,14 @@ lvgl:
             y: 8
             text: "ES3C28P Demo"
         - label:
-            id: main_text
+            id: main_label
             align: top_left
-            x: 0
+            x: 16
             y: 32
+            text_font: alef
             width: 100%
             text: |-
-              123456789012345678901234567890
+              1234567890123456789012345678901234567890
               2
               3
               4
@@ -182,12 +214,29 @@ lvgl:
               10
               11
               12
+        - label:
+            id: icon_label
+            align: top_left
+            x: 2
+            y: 32
+            text_font: mdi
+            width: 100%
+            text: |-
+               \u140B
+               \u05e2
+               \U059B
+               \U1B04
+               \u000F097A
+               \u000F1CCC
+               \U000F00EE
+               \u0241
+
 
 # gET CODES FROM: https://pictogrammers.github.io/@mdi/font/7.4.47/
 font:
-  - file: "gfonts://Roboto"
+  - file: "gfonts://Noto Sans Hebrew"
     id: alef
-    size: 20
+    size: 12
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: mdi
     size: 32
