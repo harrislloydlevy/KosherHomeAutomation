@@ -1,6 +1,6 @@
 substitutions:
   name: standalone-shabbosclock
-  friendly_name: "Standalone ShabbosClock"
+  friendly_name: "Standalone Shabbos Clock"
   api_key: !secret api_key
   ota_password: !secret ota_password
   ap_password: !secret ap_password
@@ -85,17 +85,30 @@ script:
       - lambda: |-
           bool printed_date = false;
           const char *city = JSON_GET(id(doc), ["location"]["city"]);
-          const char *hdate = JSON_GET(id(doc), ["items"][0]["hdate"]);
+          const char *eng_eng_date = JSON_GET(id(doc), ["items"][0]["date"]);
+          const char *eng_heb_date = JSON_GET(id(doc), ["items"][0]["title"]);
+          const char *heb_heb_date = JSON_GET(id(doc), ["items"][0]["hebrew"]);
+
+          const char *curr_heb_date = NULL;
+          const char *curr_eng_date = NULL;
 
           int item_num = 0;
           int cur_y=0;
           std::string icons;
           std::string content;
 
-          content += " Test ";
-
           // How is the str_sprintf not a memory leak here? C++ and std::str freaks me out still.
-          lv_label_set_text(head_text, str_sprintf("%s / %s", city, hdate).c_str());
+          lv_label_set_text
+          (
+            head_text,
+            str_sprintf
+            (
+              "%s|%s|%s",
+              eng_eng_date, 
+              eng_heb_date, 
+              heb_heb_date
+            ).c_str()
+          );
 
           // Now we print upcoming events.
           JsonArray events = id(doc)["items"];
@@ -104,30 +117,42 @@ script:
             const char *cat = JSON_GET(obj, ["category"]);
             ESP_LOGI("json", "Event %d type = %s", item_num++, cat);
 
-            if (strcmp(cat,"hebdate") == 0 && !printed_date) {
-              JSON_DBG(obj, ["hdate"]);
-              const char *hy = JSON_GET(obj, ["heDateParts"]["y"]);
-              const char *hm = JSON_GET(obj, ["heDateParts"]["m"]);
-              const char *hd = JSON_GET(obj, ["heDateParts"]["d"]);
+            if (!strcmp(cat,"hebdate")) {
+              // We don't print anything for seeing hebrew date - just update
+              // the current date to use in other things.
+              JSON_DBG(obj, ["title"]);
+              JSON_DBG(obj, ["date"]);
 
-              ESP_LOGI("json", "Hebrew Date %s / %s / %s", hy, hm, hd);
-
-              content += hy;
-              content += " / ";
-              content += hm;
-              content += " / ";
-              content += hd;
-              content += '\n';
-
-              // - "\U000F00EE" # Empty Calendar
-              icons += "\U0000F00EE";
-
-
-              printed_date = true;
-            } else if (cat == "holday") {
-            } else if (cat == "candles") {
-            } else if (cat == "havdalah") {
-            } else if (cat == "parshat") {
+              curr_heb_date = JSON_GET(obj, ["title"]);
+              curr_eng_date = JSON_GET(obj, ["date"]) + 5; // Skip year
+            } else if (!strcmp(cat,"holiday")) {
+              // Synagogue Icon
+              icons += "\U000F1B0F\n";
+              content += "\n\n";
+            } else if (!strcmp(cat, "candles")) {
+              // Candles Icon
+              icons += "\U000F17D3\n";
+              JSON_DBG(obj, ["memo"]);
+              content += JSON_GET(obj, ["memo"]);
+              content += "\n";
+              content += curr_eng_date;
+              content += ": ";
+              content += JSON_GET(obj, ["title"]);
+              content += "\n";
+            } else if (!strcmp(cat, "havdalah")) {
+              icons += "\U000F059B\n";
+              content += JSON_GET(obj, ["title"]);
+              content += "\n\n";
+            } else if (!strcmp(cat, "parashat")) {
+              icons += "\U000F1CCC\n";
+              content += JSON_GET(obj, ["title"]);
+              content += "|";
+              content += JSON_GET(obj, ["leyning"]["torah"]);
+              content += "\n";
+              content += JSON_GET(obj, ["leyning"]["maftir"]);
+              content += "|";
+              content += JSON_GET(obj, ["leyning"]["haftarah"]);
+              content += "\n";
             }
           }
 
@@ -190,6 +215,7 @@ lvgl:
     - id: main_page
       widgets:
         - label:
+            text_font: alef
             align: top_mid
             id: head_text 
             y: 8
@@ -197,7 +223,7 @@ lvgl:
         - label:
             id: main_label
             align: top_left
-            x: 16
+            x: 36
             y: 32
             text_font: alef
             width: 100%
@@ -217,19 +243,11 @@ lvgl:
         - label:
             id: icon_label
             align: top_left
-            x: 2
+            x: 0
             y: 32
             text_font: mdi
             width: 100%
-            text: |-
-               \u140B
-               \u05e2
-               \U059B
-               \U1B04
-               \u000F097A
-               \u000F1CCC
-               \U000F00EE
-               \u0241
+            text: ""
 
 
 # gET CODES FROM: https://pictogrammers.github.io/@mdi/font/7.4.47/
@@ -237,12 +255,19 @@ font:
   - file: "gfonts://Noto Sans Hebrew"
     id: alef
     size: 12
+    glyphs:
+      - " !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`{|}~’"
+      - "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+      - "אבגדהוזחטיכלמנסעפצקרשתךםןףץ"
+      - "׳"
+      # Nkkudot
+      - "\u05B0\u05B1\u05B2\u05B3\u05B4\u05B5\u05B6\u05B7\u05B8\u05B9\u05BB\u05BC\u05BD\u05C1\u05C2"
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: mdi
     size: 32
     glyphs:
-      - "\U000F140B" # Lightning bolt
       - "\U000F05e2" # Menorah
+      - "\U000F17D3" # Candelabra  List
       - "\U000F059B" # Sunset
       - "\U000F1B04" # Synagogue
       - "\U000F097A" # Magen David
