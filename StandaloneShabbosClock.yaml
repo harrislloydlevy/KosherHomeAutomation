@@ -20,6 +20,13 @@ globals:
     initial_value: '2147714'
     restore_value: yes 
 
+text_sensor:
+  - platform: template
+    name: "Current Geoname ID"
+    id: geoname_sensor
+    lambda: |-
+      return id(geoname_id);
+
 script:
   - id: get_jdate
     mode: restart
@@ -128,7 +135,24 @@ script:
             } else if (!strcmp(cat,"holiday")) {
               // Synagogue Icon
               icons += "\U000F1B0F\n";
-              content += "\n\n";
+              content += JSON_GET(obj, ["title"]);
+              content += " | ";
+              content += JSONG_GET(obj, ["date"]);
+              content += "\n";
+              content += JSON_GET(obj, ["hebrew"]);
+              content += " | ";
+              content += JSONG_GET(obj, ["hdate"]);
+              content += "\n";
+
+              // If ift's a yomtov it will have leyning, add this as a seperate tline
+              if (JSON_GET(obj, ["yomtov"]) != NULL) {
+                icons += "\U000F1CCC\n";
+                uontent += JSON_GET(obj, ["leyning"]["torah"]);
+                content += "\n";
+                content += JSON_GET(obj, ["leyning"]["haftarah"]);
+                content += "\n";
+              }
+
             } else if (!strcmp(cat, "candles")) {
               // Candles Icon
               icons += "\U000F17D3\n";
@@ -145,12 +169,8 @@ script:
               content += "\n\n";
             } else if (!strcmp(cat, "parashat")) {
               icons += "\U000F1CCC\n";
-              content += JSON_GET(obj, ["title"]);
-              content += "|";
               content += JSON_GET(obj, ["leyning"]["torah"]);
               content += "\n";
-              content += JSON_GET(obj, ["leyning"]["maftir"]);
-              content += "|";
               content += JSON_GET(obj, ["leyning"]["haftarah"]);
               content += "\n";
             }
@@ -161,7 +181,45 @@ script:
           // Again this seems something I shoudl free!
           lv_label_set_text(main_label, content.c_str());;
           lv_label_set_text(icon_label, icons.c_str());
-
+  - id: run_api_lookup
+    mode: restart
+    parameters:
+      search_id: string
+    then:
+      # Example uses the free geonames.org JSON endpoint (Replace 'demo' with your real GeoNames username)
+      - http_request.get:
+          url: !lambda |-
+            return "https://api.geonames.org/getJSON?geonameId=" + search_id + "&username=demo";
+          capture_response: true
+          max_response_buffer_size: 2048
+          on_response:
+            then:
+              - lambda: |-
+                  // Check if the server returned a valid 200 OK
+                  if (response->status_code == 200) {
+                      // Simple C++ string match parsing for the city/location name key inside the JSON payload
+                      std::size_t found = body.find("\"name\":\"");
+                      if (found != std::string::npos) {
+                          std::size_t start = found + 8;
+                          std::size_t end = body.find("\"", start);
+                          std::string city_name = body.substr(start, end - start);
+                          
+                          // Display the found city name on the display in bright green
+                          id(geoname_lookup_status).set_text(("Found: " + city_name).c_str());
+                          id(geoname_lookup_status).set_text_color(lv_color_hex(0x00FF00));
+                      } else {
+                          id(geoname_lookup_status).set_text("ID not found on server.");
+                          id(geoname_lookup_status).set_text_color(lv_color_hex(0xFF0000));
+                      }
+                  } else {
+                      id(geoname_lookup_status).set_text("API Connection Error");
+                      id(geoname_lookup_status).set_text_color(lv_color_hex(0xFF0000));
+                  }
+          on_error:
+            then:
+              - lambda: |-
+                  id(geoname_lookup_status).set_text("Network Timeout!");
+                  id(geoname_lookup_status).set_text_color(lv_color_hex(0xFF0000));
 
 # ============================================================ 
 # ESPHome YAML start
@@ -248,6 +306,76 @@ lvgl:
             text_font: mdi
             width: 100%
             text: ""
+    - id: geoname_page
+      widgets:
+        # Label title
+        - label:
+          text: "Geoname ID Settings"
+          text_font: montserrat_20
+
+        # Textarea to display current ID and accept new input
+        - textarea:
+          id: geoname_input
+          width: 80%
+          one_line: true
+          # On startup, pull the current stored geoname ID
+          text: !lambda |-
+            return id(geoname_id).c_str();
+          # When clicked, ensure it gains focus and activates the keyboard
+          on_click:
+            - lvgl.widget.focus: geoname_input
+          on_value_changed:
+                - lambda: |-
+                    std::string current_text = id(geoname_input).get_text();
+                    if (current_text.length() > 6) {
+                        // Truncate the string to the first 6 characters
+                        current_text = current_text.substr(0, 6);
+                        id(geoname_input).set_text(current_text.c_str());
+                    }
+                    
+                    // Run the lookup ONLY when exactly 6 numbers are entered
+                    if (current_text.length() == 6) {
+                        id(geoname_lookup_status).set_text("Searching API...");
+                        id(geoname_lookup_status).set_text_color(lv_color_hex(0xFFFF00)); // Yellow while searching
+                        
+                        // Fire off the HTTP call script
+                        id(run_api_lookup).execute(current_text);
+                    } else {
+                        id(geoname_lookup_status).set_text("Enter a 6-digit Geoname ID");
+                        id(geoname_lookup_status).set_text_color(lv_color_hex(0x888888)); // Gray
+                    }
+        # Save Button
+        - button:
+          id: save_btn
+          width: 120px
+          height: 45px
+          - label:
+            text: "Save"
+            align: CENTER
+          # Action when user clicks Save
+          on_click:
+            - then:
+              - lambda: |-
+                // Get the text from the textarea and update the global variable
+                std::string new_id = id(geoname_input).get_text();
+                id(geoname_id) = new_id;
+                // Synchronize with the Home Assistant sensor component
+                id(geoname_sensor).publish_state(new_id);
+                ESP_LOGI("config", "New Geoname ID saved: %s", new_id.c_str());
+        - label:
+          id: geoname_lookup_status
+          text: "Enter a 6-digit Geoname ID"
+          text_font: alef
+          text_color: 0x888888
+          align: CENTER
+        # On-screen keyboard for number entry (Geoname IDs are numbers)
+        - keyboard:
+            id: num_keyboard
+            width: 100%
+            height: 45%
+            # Restrict keyboard to digits/punctuation for easy ID input
+            mode: NUMBER
+            textarea: geoname_input
 
 
 # gET CODES FROM: https://pictogrammers.github.io/@mdi/font/7.4.47/
@@ -259,7 +387,7 @@ font:
       - " !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`{|}~’"
       - "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
       - "אבגדהוזחטיכלמנסעפצקרשתךםןףץ"
-      - "׳"
+      - "׳'"
       # Nkkudot
       - "\u05B0\u05B1\u05B2\u05B3\u05B4\u05B5\u05B6\u05B7\u05B8\u05B9\u05BB\u05BC\u05BD\u05C1\u05C2"
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
