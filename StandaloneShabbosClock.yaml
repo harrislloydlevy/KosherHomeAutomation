@@ -44,14 +44,20 @@ script:
                                         "min=on&"
                                         "mod=on&"
                                         "nx=on&"
-                                        "D=on&"
+                                        "d=on&"
+                                        "o=on&"
+                                        "molad=on&"
                                         "ss=on&"
                                         "mf=on&"
                                         "c=on&"
                                         "geo=geoname&"
                                         "M=on&"
                                         "s=on&"
-                                        "geonameid=%d"
+                                        "geonameid=%d&"
+                                        "dps=on&"
+                                        "dr1=on&"
+                                        "dr3=on&"
+                                        "F=on&"
                                         "&start=%04d-%02d-%02d&end=%04d-%02d-%02d";
                   snprintf(buf, 256, url_fmt, id(geoname_id), time.year, time.month, time.day_of_month, end_time.year, end_time.month, end_time.day_of_month);
                   ESP_LOGI("url", buf);
@@ -77,6 +83,13 @@ script:
                         - logger.log:
                             format: "Error: Response status: %d, message %s"
                             args: [ 'response->status_code', 'body.c_str()' ]
+                        - lambda: |-
+                            lv_label_set_text
+                            (
+                               head_text,
+                               str_sprintf("Error Accessing HebCal.org\nCode: %d | Error: %s", response->status_code, body.c_str()).c_str()
+                            );
+                              
 
 
   - id: display_jdate
@@ -104,10 +117,11 @@ script:
             head_text,
             str_sprintf
             (
-              "%s|%s|%s",
-              eng_eng_date, 
+              "%s|%s\n%s|%s",
               eng_heb_date, 
-              heb_heb_date
+              heb_heb_date,
+              eng_eng_date,
+              city
             ).c_str()
           );
 
@@ -175,15 +189,20 @@ script:
           // Again this seems something I shoudl free!
           lv_label_set_text(main_label, content.c_str());;
           lv_label_set_text(icon_label, icons.c_str());
-  - id: run_api_lookup
+
+  - id: set_location
     mode: restart
     parameters:
       search_id: int
     then:
+      - lambda: |-
+          lv_label_set_text(geoname_lookup_status,"Searching API..");
       # Example uses the free geonames.org JSON endpoint (Replace 'demo' with your real GeoNames username)
       - http_request.get:
           url: !lambda |-
-            return std::string("https://api.geonames.org/getJSON?geonameId=") + std::to_string(search_id) + "&username=demo";
+              std::string url =  std::string("http://www.hebcal.com/hebcal?v=1&cfg=json&geo=geoname&geonameid=") + std::to_string(search_id);
+              ESP_LOGI("set_loc", "URL is %s", url.c_str());
+              return url;
           capture_response: true
           max_response_buffer_size: 2048
           on_response:
@@ -191,25 +210,25 @@ script:
               - lambda: |-
                   // Check if the server returned a valid 200 OK
                   if (response->status_code == 200) {
-                      // Simple C++ string match parsing for the city/location name key inside the JSON payload
-                      std::size_t found = body.find("\"name\":\"");
-                      if (found != std::string::npos) {
-                          std::size_t start = found + 8;
-                          std::size_t end = body.find("\"", start);
-                          std::string city_name = "Found: " + body.substr(start, end - start);
-                          
-                          // Display the found city name on the display in bright green
-                          lv_label_set_text(geoname_lookup_status, city_name.c_str());
-                      } else {
-                          lv_label_set_text(geoname_lookup_status, "ID not found on server.");
-                      }
+                      id(geoname_id) = search_id;
+
+                      // Now to udpate teh main page with new location
+                      id(get_jdate)->execute();
+                      id(display_jdate)->execute();
+
+                      // And return to main
+                      lv_screen_load(id(main_page).obj);
+                  } else if (response->status_code == 404) {
+                      lv_label_set_text(geoname_lookup_status, "Unknown Location");
                   } else {
-                      lv_label_set_text(geoname_lookup_status, "Connection Error");
+                      std::string message = "Server Error: ";
+                      message += to_string(response->status_code);
+                      lv_label_set_text(geoname_lookup_status, message.c_str());
                   }
           on_error:
             then:
               - lambda: |-
-                  lv_label_set_text(geoname_lookup_status, "Network Timeout!");
+                  lv_label_set_text(geoname_lookup_status, "Network Error!");
 
 # ============================================================ 
 # ESPHome YAML start
@@ -248,10 +267,14 @@ time:
       - seconds: 0
         hours: /12
         then:
+          - lambda: |-
+              id(set_location).execute(id(geoname_id));
           - script.execute: get_jdate
           - script.execute: display_jdate
     on_time_sync:
       then:
+        - lambda: |-
+              id(set_location).execute(id(geoname_id));
         - script.execute: get_jdate
         - script.execute: display_jdate
 
@@ -262,6 +285,19 @@ lvgl:
   pages:
     - id: main_page
       widgets:
+        - button:
+            id: go_to_geo
+            width: 20
+            height: 20
+            x: 8
+            y: 8
+            widgets:
+              - label:
+                  text: "Geo"
+                  align: CENTER
+            on_click:
+              then:
+                - lvgl.page.show: geoname_page
         - label:
             text_font: alef
             align: top_mid
@@ -272,7 +308,7 @@ lvgl:
             id: main_label
             align: top_left
             x: 36
-            y: 32
+            y: 36
             text_font: alef
             width: 100%
             text: |-
@@ -292,73 +328,74 @@ lvgl:
             id: icon_label
             align: top_left
             x: 0
-            y: 32
+            y: 36
             text_font: mdi
             width: 100%
             text: ""
     - id: geoname_page
       widgets:
-        # Label title
+        - button:
+            id: go_to_main
+            width: 20
+            height: 20
+            x: 8
+            y: 8
+            widgets:
+              - label:
+                  text: "<-"
+                  align: CENTER
+            on_click:
+              then:
+                - lvgl.page.show: main_page
+
         - label:
             text: "Geoname ID Settings"
-            text_font: montserrat_20
+            text_font: alef
+            align: top_mid
+            y: 8
+
+        - label:
+            id: geoname_lookup_status
+            text: "Enter the 6-digit Geoname.org ID for your location"
+            text_font: alef
+            align: top_mid
+            x: 0
+            y: 30
+            width: 80%
+            height: 20
 
         # Textarea to display current ID and accept new input
         - textarea:
             id: geoname_input
+            align: top_mid
+            x: 0
+            y: 60
             width: 80%
+            height: 20
+
             one_line: true
-            # On startup, pull the current stored geoname ID
-            text: !lambda |-
-              return std::to_string(id(geoname_id));
-            # When clicked, ensure it gains focus and activates the keyboard
-            on_click:
-              - lvgl.widget.focus: geoname_input
-            on_value:
-              - lambda: |-
-                  std::string current_text = lv_label_get_text(geoname_input);
-                  if (current_text.length() > 6) {
-                      current_text = current_text.substr(0, 6);
-                      lv_label_set_text(geoname_input, current_text.c_str());
-                  }
+            # On startup keep it blank
+            text: ""
 
-                  if (current_text.length() == 6) {
-                      lv_label_set_text(geoname_lookup_status,"Searching API...");
-
-                      id(run_api_lookup).execute(atoi(current_text.c_str()));
-                  } else {
-                      lv_label_set_text(geoname_lookup_status, "Enter a 6-digit Geoname ID");
-                  }              
-          # Save Button
-        - button:
-            id: save_btn
-            width: 120px
-            height: 45px
-            widgets:
-              - label:
-                  text: "Save"
-                  align: CENTER
-            # Action when user clicks Save
-            on_click:
-              - then:
-                - lambda: |-
-                    std::string new_id = lv_label_get_text(geoname_input);
-                    id(geoname_id) = atoi(new_id.c_str());
-                    ESP_LOGI("config", "New Geoname ID saved: %d", id(geoname_id));
-        - label:
-            id: geoname_lookup_status
-            text: "Enter a 6-digit Geoname ID"
-            text_font: alef
-            text_color: 0x888888
-            align: CENTER
         # On-screen keyboard for number entry (Geoname IDs are numbers)
         - keyboard:
             id: num_keyboard
-            width: 100%
-            height: 45%
+            align: top_mid
+            x: 0
+            y: 95
+            width: 300
+            height: 135
+
             # Restrict keyboard to digits/punctuation for easy ID input
             mode: NUMBER
             textarea: geoname_input
+            on_ready:
+              - then:
+                - lambda: |-
+                    ESP_LOGI("config", "New Geoname ID entered: %s", lv_textarea_get_text(id(geoname_input)));
+
+                    id(set_location)->execute(atoi(lv_textarea_get_text(id(geoname_input))));
+
 
 # gET CODES FROM: https://pictogrammers.github.io/@mdi/font/7.4.47/
 font:
@@ -369,7 +406,7 @@ font:
       - " !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`{|}~’"
       - "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
       - "אבגדהוזחטיכלמנסעפצקרשתךםןףץ"
-      - "׳"
+      - "״"
       # Nkkudot
       - "\u05B0\u05B1\u05B2\u05B3\u05B4\u05B5\u05B6\u05B7\u05B8\u05B9\u05BB\u05BC\u05BD\u05C1\u05C2"
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
@@ -397,3 +434,17 @@ image:
     id: background
     resize: 320x240
     type: RGB565
+
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 110ms
+    window: 110ms
+    active: true
+
+bluetooth_proxy:
+  active: true
+
+api:
+ encryption:
+   key: ${api_key}
+
