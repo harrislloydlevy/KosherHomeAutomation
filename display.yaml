@@ -30,7 +30,7 @@ light:
 
 display:
   - id: main_display
-    platform: ili9xxx
+    platform: mipi_spi
     model: ILI9341
     spi_id: spi_bus
     cs_pin: GPIO10   # LCD_CS
