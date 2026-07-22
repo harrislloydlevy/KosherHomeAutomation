@@ -1,6 +1,6 @@
 ---
 substitutions:
-  name: bedsideDisplay
+  name: bedsid
   friendly_name: "Bedside Display"
   api_key: !secret api_key
   ota_password: !secret ota_password
@@ -10,8 +10,6 @@ substitutions:
 
 packages:
   board: !include ./board.yaml
-
-ignore_strapping_warning: true
 
 esphome:
   name: ${name}
@@ -80,14 +78,6 @@ wifi:
 script:
   - id: redraw_weight_graph
     then:
-      - lvgl.draw_canvas:
-          id: weight_canvas
-          x: 35
-          y: 0
-          width: 275
-          height: 105
-          color: 0x111827
-          fill: true
       - lambda: |-
           // Parse the weight string and draw the line graph
           std::string str = id(weight_stream).state;
