@@ -2,6 +2,9 @@
 
 #include "esphome.h"
 #include "lvgl.h"
+#include <string>
+#include <vector>
+#include <sstream>
 
 static lv_obj_t *weight_chart = nullptr;
 static lv_chart_series_t *weight_series = nullptr;
