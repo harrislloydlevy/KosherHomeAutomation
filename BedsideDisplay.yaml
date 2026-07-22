@@ -27,18 +27,7 @@ text_sensor:
     entity_id: sensor.weight_lts_history_string
     id: weight_stream
     on_value:
-      - lvgl.chart.update:
-          id: weight_chart
-          series:
-            - data: !lambda |-
-                std::string str = x;
-                std::vector<float> values;
-                std::stringstream ss(str);
-                std::string item;
-                while (std::getline(ss, item, ',')) {
-                  values.push_back(std::stof(item));
-                }
-                return values;
+      - script.execute: redraw_weight_graph
           
   - platform: homeassistant
     name: "Stream of Fat Pct Measurements"
@@ -87,6 +76,70 @@ logger:
 wifi:
   ssid: ${wifi_ssid}
   password: ${wifi_password}
+
+script:
+  - id: redraw_weight_graph
+    then:
+      - lvgl.draw_canvas:
+          id: weight_canvas
+          x: 35
+          y: 0
+          width: 275
+          height: 105
+          color: 0x111827
+          fill: true
+      - lambda: |-
+          // Parse the weight string and draw the line graph
+          std::string str = id(weight_stream).state;
+          std::vector<float> values;
+          std::stringstream ss(str);
+          std::string item;
+          while (std::getline(ss, item, ',')) {
+            try {
+              values.push_back(std::stof(item));
+            } catch (...) {
+              // Ignore invalid values
+            }
+          }
+          
+          if (values.empty()) return;
+          
+          // Draw the line graph
+          int canvas_width = 275;
+          int canvas_height = 105;
+          int point_count = values.size();
+          int max_points = 50; // Limit number of points to display
+          
+          // If we have more points than we can display, show the most recent ones
+          int start_index = 0;
+          if (point_count > max_points) {
+            start_index = point_count - max_points;
+          }
+          
+          // Find min/max values for scaling
+          float min_val = values[start_index];
+          float max_val = values[start_index];
+          for (int i = start_index; i < point_count; i++) {
+            if (values[i] < min_val) min_val = values[i];
+            if (values[i] > max_val) max_val = values[i];
+          }
+          
+          // Add some padding to the scale
+          float range = max_val - min_val;
+          if (range == 0) range = 1; // Avoid division by zero
+          min_val -= range * 0.1;
+          max_val += range * 0.1;
+          
+          // Draw the line graph
+          for (int i = start_index; i < point_count - 1; i++) {
+            int x1 = ((i - start_index) * canvas_width) / (point_count - start_index - 1);
+            int y1 = canvas_height - ((values[i] - min_val) * canvas_height) / (max_val - min_val);
+            int x2 = ((i + 1 - start_index) * canvas_width) / (point_count - start_index - 1);
+            int y2 = canvas_height - ((values[i + 1] - min_val) * canvas_height) / (max_val - min_val);
+            
+            // Draw line segment
+            lvgl_draw_line(x1 + 35, y1, x2 + 35, y2, 0x10B981);
+          }
 
 lvgl:
   displays: [main_display]
@@ -363,24 +416,13 @@ lvgl:
                   text_color: 0xFFFFFF
                   text_font: montserrat_14
                   text_align: CENTER
-              - chart:
-                  id: weight_chart
-                  x: 30
+              - canvas:
+                  id: weight_canvas
+                  x: 35
                   y: 0
-                  width: 280
+                  width: 275
                   height: 105
-                  type: line
-                  series:
-                    - color: 0x10B981
-                  x_axis:
-                    show: false
-                  y_axis:
-                    show: true
-                    min: 0
-                    max: 150
-                    major_tick_every: 25
-                    label:
-                      show: false
+                  bg_color: 0x111827
 
 
 
