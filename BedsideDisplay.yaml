@@ -1,6 +1,6 @@
 ---
 substitutions:
-  name: bedside_display
+  name: bedsideDisplay
   friendly_name: "Bedside Display"
   api_key: !secret api_key
   ota_password: !secret ota_password
@@ -10,6 +10,8 @@ substitutions:
 
 packages:
   board: !include ./board.yaml
+
+ignore_strapping_warning: true
 
 esphome:
   name: ${name}
@@ -166,7 +168,7 @@ lvgl:
                   on_value:
                     - logger.log:
                         format: "Light switch toggled, value=%d"
-                        args: [ 'value' ]
+                        args: [ 'x' ]
                     - homeassistant.service:
                         service: light.toggle
                         data:
@@ -217,7 +219,7 @@ lvgl:
                   on_value:
                     - logger.log:
                         format: "Fan switch toggled, value=%d"
-                        args: [ 'value' ]
+                        args: [ 'x' ]
                     - homeassistant.service:
                         service: fan.toggle
                         data:
@@ -268,7 +270,7 @@ lvgl:
                   on_value:
                     - logger.log:
                         format: "Floor light switch toggled, value=%d"
-                        args: [ 'value' ]
+                        args: [ 'x' ]
                     - homeassistant.service:
                         service: light.toggle
                         data:
@@ -319,7 +321,7 @@ lvgl:
                   on_value:
                     - logger.log:
                         format: "Bathroom light switch toggled, value=%d"
-                        args: [ 'value' ]
+                        args: [ 'x' ]
                     - homeassistant.service:
                         service: light.toggle
                         data:
