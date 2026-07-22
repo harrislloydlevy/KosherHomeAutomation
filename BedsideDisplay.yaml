@@ -73,8 +73,6 @@ wifi:
   ssid: ${wifi_ssid}
   password: ${wifi_password}
 
-homeassistant:
-
 lvgl:
   displays: [main_display]
   touchscreens: [main_touchscreen]
