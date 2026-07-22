@@ -18,6 +18,11 @@ esphome:
     - priority: -100
       then:
         - logger.log: "Booted Screen"
+  platformio_options:
+    build_flags:
+      - -D LV_USE_CHART=1
+  includes:
+    - chart_helpers.h
 
 text_sensor:
   - platform: homeassistant
@@ -79,57 +84,7 @@ script:
   - id: redraw_weight_graph
     then:
       - lambda: |-
-          // Parse the weight string and draw the line graph
-          std::string str = id(weight_stream).state;
-          std::vector<float> values;
-          std::stringstream ss(str);
-          std::string item;
-          while (std::getline(ss, item, ',')) {
-            try {
-              values.push_back(std::stof(item));
-            } catch (...) {
-              // Ignore invalid values
-            }
-          }
-          
-          if (values.empty()) return;
-          
-          // Draw the line graph
-          int canvas_width = 275;
-          int canvas_height = 105;
-          int point_count = values.size();
-          int max_points = 50; // Limit number of points to display
-          
-          // If we have more points than we can display, show the most recent ones
-          int start_index = 0;
-          if (point_count > max_points) {
-            start_index = point_count - max_points;
-          }
-          
-          // Find min/max values for scaling
-          float min_val = values[start_index];
-          float max_val = values[start_index];
-          for (int i = start_index; i < point_count; i++) {
-            if (values[i] < min_val) min_val = values[i];
-            if (values[i] > max_val) max_val = values[i];
-          }
-          
-          // Add some padding to the scale
-          float range = max_val - min_val;
-          if (range == 0) range = 1; // Avoid division by zero
-          min_val -= range * 0.1;
-          max_val += range * 0.1;
-          
-          // Draw the line graph
-          for (int i = start_index; i < point_count - 1; i++) {
-            int x1 = ((i - start_index) * canvas_width) / (point_count - start_index - 1);
-            int y1 = canvas_height - ((values[i] - min_val) * canvas_height) / (max_val - min_val);
-            int x2 = ((i + 1 - start_index) * canvas_width) / (point_count - start_index - 1);
-            int y2 = canvas_height - ((values[i + 1] - min_val) * canvas_height) / (max_val - min_val);
-            
-            // Draw line segment
-            lvgl_draw_line(x1 + 35, y1, x2 + 35, y2, 0x10B981);
-          }
+          update_weight_chart(id(weight_stream).state);
 
 lvgl:
   displays: [main_display]
@@ -406,13 +361,18 @@ lvgl:
                   text_color: 0xFFFFFF
                   text_font: montserrat_14
                   text_align: CENTER
-              - canvas:
-                  id: weight_canvas
+              - obj:
+                  id: weight_chart_obj
                   x: 35
                   y: 0
                   width: 275
                   height: 105
                   bg_color: 0x111827
+                  widgets:
+                    - label:
+                        text: !lambda |-
+                          draw_weight_chart(weight_chart_obj);
+                          return "";
 
 
 
