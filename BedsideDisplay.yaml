@@ -26,6 +26,19 @@ text_sensor:
     name: "Stream of Weight Measurements"
     entity_id: sensor.weight_lts_history_string
     id: weight_stream
+    on_value:
+      - lvgl.chart.update:
+          id: weight_chart
+          series:
+            - data: !lambda |-
+                std::string str = x;
+                std::vector<float> values;
+                std::stringstream ss(str);
+                std::string item;
+                while (std::getline(ss, item, ',')) {
+                  values.push_back(std::stof(item));
+                }
+                return values;
           
   - platform: homeassistant
     name: "Stream of Fat Pct Measurements"
@@ -338,6 +351,36 @@ lvgl:
             border_color: 0x4B5563
             radius: 8
             pad_all: 0
+            widgets:
+              - label:
+                  id: y_axis_label
+                  x: 0
+                  y: 0
+                  width: 30
+                  height: 105
+                  align: LEFT_MID
+                  text: "Kg"
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+                  text_align: CENTER
+              - chart:
+                  id: weight_chart
+                  x: 30
+                  y: 0
+                  width: 280
+                  height: 105
+                  type: line
+                  series:
+                    - color: 0x10B981
+                  x_axis:
+                    show: false
+                  y_axis:
+                    show: true
+                    min: 0
+                    max: 150
+                    major_tick_every: 25
+                    label:
+                      show: false
 
 
 
