@@ -21,6 +21,9 @@ static void draw_weight_chart(lv_obj_t *parent) {
     lv_chart_set_point_count(weight_chart, 20);
     lv_obj_set_style_line_color(weight_chart, lv_color_hex(0x4B5563), LV_PART_ITEMS);
     weight_series = lv_chart_add_series(weight_chart, lv_color_hex(0x10B981), LV_CHART_AXIS_PRIMARY_Y);
+    
+    // Add Y axis labels
+    lv_chart_set_axis_tick(weight_chart, LV_CHART_AXIS_PRIMARY_Y, 10, 5, 5, 2, true, 40);
   }
 }
 
@@ -46,9 +49,47 @@ static void update_weight_chart(const std::string &data_str) {
   
   if (values.empty()) return;
   
+  // Process values: ignore leading zeros and treat internal zeros as previous value
+  std::vector<float> processed_values;
+  bool found_non_zero = false;
+  float last_valid_value = 0.0f;
+  
+  for (size_t i = 0; i < values.size(); i++) {
+    if (!found_non_zero && values[i] == 0.0f) {
+      continue; // Skip leading zeros
+    }
+    
+    found_non_zero = true;
+    
+    if (values[i] == 0.0f) {
+      processed_values.push_back(last_valid_value);
+    } else {
+      processed_values.push_back(values[i]);
+      last_valid_value = values[i];
+    }
+  }
+  
+  if (processed_values.empty()) return;
+  
+  // Find min and max values for auto-ranging
+  float min_val = processed_values[0];
+  float max_val = processed_values[0];
+  
+  for (size_t i = 1; i < processed_values.size(); i++) {
+    if (processed_values[i] < min_val) min_val = processed_values[i];
+    if (processed_values[i] > max_val) max_val = processed_values[i];
+  }
+  
+  // Add 3kg padding to top and bottom
+  min_val -= 3.0f;
+  max_val += 3.0f;
+  
+  // Set the chart range
+  lv_chart_set_range(weight_chart, LV_CHART_AXIS_PRIMARY_Y, (lv_coord_t)(min_val * 10), (lv_coord_t)(max_val * 10));
+  
   // Limit to the chart's point count
   int point_count = 20;
-  int data_size = values.size();
+  int data_size = processed_values.size();
   
   // Clear existing data
   for (int i = 0; i < point_count; i++) {
@@ -58,7 +99,7 @@ static void update_weight_chart(const std::string &data_str) {
   // Add new data points (show most recent values)
   int start_index = (data_size > point_count) ? (data_size - point_count) : 0;
   for (int i = start_index; i < data_size; i++) {
-    lv_chart_set_next_value(weight_chart, weight_series, (lv_coord_t)values[i]);
+    lv_chart_set_next_value(weight_chart, weight_series, (lv_coord_t)(processed_values[i] * 10)); // Scale by 10 for better precision
   }
 
   lv_obj_invalidate(weight_chart);
