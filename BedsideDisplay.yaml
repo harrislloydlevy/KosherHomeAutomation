@@ -176,11 +176,11 @@ lvgl:
                     bg_color: 0xFFFFFF
                     border_color: 0x9CA3AF
                     border_width: 1
-                  on_value:
+                  on_change:
                     - logger.log:
                         format: "Light switch toggled, value=%d"
                         args: [ 'x' ]
-                    - homeassistant.service:
+                    - homeassistant.action:
                         service: light.toggle
                         data:
                           entity_id: light.master_bedroom_light
@@ -227,7 +227,7 @@ lvgl:
                     bg_color: 0xFFFFFF
                     border_color: 0x9CA3AF
                     border_width: 1
-                  on_value:
+                  on_change:
                     - logger.log:
                         format: "Fan switch toggled, value=%d"
                         args: [ 'x' ]
@@ -257,7 +257,7 @@ lvgl:
                   y: 0
                   width: 35
                   height: 38
-                  text: "\U000F09A0"
+                  text: "\U000F08DD"
                   text_font: mdi_icons_24
                   text_align: CENTER
                   text_color: 0xFFFFFF
@@ -285,7 +285,7 @@ lvgl:
                     - homeassistant.service:
                         service: light.toggle
                         data:
-                          entity_id: light.floor_light
+                          entity_id: light.bedroom_floor_light
 
         - obj:
             id: widget_1782905750837_k1ykruh1w
@@ -308,7 +308,7 @@ lvgl:
                   y: 0
                   width: 35
                   height: 38
-                  text: "\U000F08DD"
+                  text: "\U000F09A0"
                   text_font: mdi_icons_24
                   text_align: CENTER
                   text_color: 0xFFFFFF
@@ -329,14 +329,29 @@ lvgl:
                     bg_color: 0xFFFFFF
                     border_color: 0x9CA3AF
                     border_width: 1
-                  on_value:
+                  on_change:
                     - logger.log:
                         format: "Bathroom light switch toggled, value=%d"
                         args: [ 'x' ]
-                    - homeassistant.service:
-                        service: light.toggle
-                        data:
-                          entity_id: light.bathroom_light
+                    - if:
+                        condition:
+                          lambda: 'return x;'
+                        then:
+                          - logger.log:
+                             format: "Bathroom light switch toggled, value=%d"
+                             args: [ 'x' ]
+                          - homeassistant.action:
+                              action: homeassistant.turn_on
+                              data:
+                                entity_id: light.ensuite_light
+                        else:
+                          - logger.log:
+                             format: "Bathroom light switch toggled, value=%d"
+                             args: [ 'x' ]
+                          - homeassistant.action:
+                              action: homeassistant.turn_off
+                              data:
+                                entity_id: "light.ensuite_light, light.ensuite_fan, switch.ensuite_heater"
 
         - obj:
             id: graph_area
@@ -351,28 +366,9 @@ lvgl:
             pad_all: 0
             widgets:
               - label:
-                  id: y_axis_label
-                  x: 0
-                  y: 0
-                  width: 30
-                  height: 105
-                  align: LEFT_MID
-                  text: "Kg"
-                  text_color: 0xFFFFFF
-                  text_font: montserrat_14
-                  text_align: CENTER
-              - obj:
-                  id: weight_chart_obj
-                  x: 35
-                  y: 0
-                  width: 275
-                  height: 105
-                  bg_color: 0x111827
-                  widgets:
-                    - label:
-                        text: !lambda |-
-                          draw_weight_chart(weight_chart_obj);
-                          return "";
+                  text: !lambda |-
+                    draw_weight_chart(weight_chart_obj);
+                    return "";
 
 
 
