@@ -365,27 +365,17 @@ lvgl:
             radius: 8
             pad_all: 0
             widgets:
-              - label:
-                  text: !lambda |-
-                    draw_weight_chart(weight_chart_obj);
-                    return "";
-
-
-
-esp32_ble_tracker:
-  scan_parameters:
-    interval: 110ms
-    window: 110ms
-    active: true
-
-bluetooth_proxy:
-  active: true
+              - obj:
+                  id: weight_chart_container
+                  width: 310
+                  height: 105
+                  on_create:
+                    lambda: |-
+                      draw_weight_chart(obj);
 
 api:
  encryption:
    key: ${api_key}
-
-
 
 font:
   - file:
