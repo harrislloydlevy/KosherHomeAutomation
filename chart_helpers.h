@@ -39,8 +39,8 @@ static void update_weight_chart(const std::string &data_str) {
     // Manual conversion without exceptions
     if (!item.empty()) {
       char *endptr;
-      float val = std::atof(item.c_str());
-      // Check if conversion was successful (basic check)
+      float val = std::strtof(item.c_str(), &endptr);
+      // Check if conversion was successful (make sure we parsed at least one character)
       if (endptr != item.c_str()) {
         values.push_back(val);
       }
