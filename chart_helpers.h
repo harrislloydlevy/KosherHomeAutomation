@@ -12,8 +12,10 @@ static lv_chart_series_t *weight_series = nullptr;
 
 static void draw_weight_chart(lv_obj_t *parent) {
   if (weight_chart == nullptr) {
+    lv_obj_set_style_pad_all(parent, 0, LV_PART_MAIN);
     weight_chart = lv_chart_create(parent);
-    lv_obj_set_size(weight_chart, 275, 105);
+    lv_obj_set_style_pad_all(weight_chart, 0, LV_PART_MAIN);
+    lv_obj_set_size(weight_chart, 310, 105);
     lv_obj_set_style_bg_color(weight_chart, lv_color_hex(0x111827), LV_PART_MAIN);
     lv_chart_set_type(weight_chart, LV_CHART_TYPE_LINE);
     lv_chart_set_point_count(weight_chart, 20);
@@ -58,6 +60,6 @@ static void update_weight_chart(const std::string &data_str) {
   for (int i = start_index; i < data_size; i++) {
     lv_chart_set_next_value(weight_chart, weight_series, (lv_coord_t)values[i]);
   }
-  
+
   lv_obj_invalidate(weight_chart);
 }
