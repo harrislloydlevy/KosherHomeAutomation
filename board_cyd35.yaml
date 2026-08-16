@@ -1,0 +1,37 @@
+# Board: Sunton ESP32-3248S035R ("Yellow CYD" 3.5", 320x480 ST7796, XPT2046 resistive touch)
+# Classic ESP32-WROOM-32 (4MB flash, no PSRAM), USB-C power/programming.
+#
+# SINGLE shared SPI bus (LCD + Touch share SCLK/MOSI/MISO):
+#   bus:  SCK=GPIO14 MOSI=GPIO13 MISO=GPIO12
+#   LCD:  CS=GPIO15 DC=GPIO2 BL=GPIO27 (RST tied to EN, no software reset)
+#   Touch XPT2046: CS=GPIO33  (IRQ=GPIO36 NOT used — ESP32 WiFi glitch bug; poll)
+#
+# Pinout source: https://macsbug.wordpress.com/2022/10/02/esp32-3248s035/
+# Note: 3.5" S035 differs from the 2.8" S028 — backlight is GPIO27 (not GPIO21),
+# and touch shares the TFT bus with CS33 (not a separate 25/32/39 bus).
+
+packages:
+  display: !include ./display_cyd35.yaml
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+spi:
+  - id: spi_bus
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+
+binary_sensor:
+  - id: boot_button
+    platform: gpio
+    name: Boot Button
+    pin:
+      number: GPIO0
+      ignore_strapping_warning: true
+      inverted: true
+      mode:
+        input: true
+        pullup: true

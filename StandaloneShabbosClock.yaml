@@ -9,7 +9,7 @@ substitutions:
   wifi_password: !secret wifi_password
 
 packages:
-  board: !include ./board.yaml
+  board: !include ./board_cyd35.yaml
 
 http_request:
 
@@ -245,6 +245,10 @@ esphome:
 
 logger:
 
+ota:
+  - platform: esphome
+    password: ${ota_password}
+
 wifi:
   ssid: ${wifi_ssid}
   password: ${wifi_password}
@@ -281,7 +285,7 @@ time:
 lvgl:
   displays: [main_display]
   touchscreens: [main_touchscreen]
-  rotation: 270
+  rotation: 90  # 480x320 landscape. If the display is upside-down, change to 270.
   pages:
     - id: main_page
       widgets:
@@ -382,9 +386,9 @@ lvgl:
             id: num_keyboard
             align: top_mid
             x: 0
-            y: 95
-            width: 300
-            height: 135
+            y: 100
+            width: 440
+            height: 180
 
             # Restrict keyboard to digits/punctuation for easy ID input
             mode: NUMBER
@@ -432,17 +436,8 @@ font:
 image:
   - file: background.png
     id: background
-    resize: 320x240
+    resize: 480x320
     type: RGB565
-
-esp32_ble_tracker:
-  scan_parameters:
-    interval: 110ms
-    window: 110ms
-    active: true
-
-bluetooth_proxy:
-  active: true
 
 api:
  encryption:
