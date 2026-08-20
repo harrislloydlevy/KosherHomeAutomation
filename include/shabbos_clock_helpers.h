@@ -121,6 +121,7 @@ static void extract_display_data(
     std::string &parasha_torah,
     std::string &parasha_haftarah,
     std::string &daily_study,
+    std::string &zmanim,
     std::string &upcoming,
     std::string &melachot_status,
     std::string &shofar_status,
@@ -233,7 +234,7 @@ static void extract_display_data(
   parasha_torah  = p_torah;
   parasha_haftarah = p_haftarah;
 
-  // Daily study — look for dafyomi, tehillim, etc.
+  // Daily study — look for dafyomi, tehillim, rambam
   daily_study.clear();
   for (JsonObject obj : items) {
     const char *cat = JSON_GET(obj, ["category"]);
@@ -250,6 +251,41 @@ static void extract_display_data(
         break;
       }
     }
+  }
+  // Add Rambam reminder if we have dafyomi or tehillim
+  if (!daily_study.empty()) {
+    daily_study += "  |  Rambam: chabad.org/daily";
+  }
+
+  // Zmanim: estimate sunset from candle/havdalah, calculate Plag/Maariv/Mincha
+  zmanim.clear();
+  int sun_h = -1, sun_m = -1;
+  if (c_h >= 0) {
+    // Candle = sunset - 18 min → sunset = candle + 18
+    sun_h = c_h;
+    sun_m = c_m + 18;
+    if (sun_m >= 60) { sun_h++; sun_m -= 60; }
+  } else if (h_h >= 0) {
+    // Havdalah = sunset + 50 min → sunset = havdalah - 50
+    sun_h = h_h;
+    sun_m = h_m - 50;
+    if (sun_m < 0) { sun_h--; sun_m += 60; }
+  }
+  if (sun_h >= 0) {
+    // Plag HaMincha: 75 min before sunset
+    int plag_h = sun_h, plag_m = sun_m - 75;
+    while (plag_m < 0) { plag_h--; plag_m += 60; }
+    // Earliest Maariv: 50 min after sunset
+    int maariv_h = sun_h, maariv_m = sun_m + 50;
+    while (maariv_m >= 60) { maariv_h++; maariv_m -= 60; }
+    // Format using ISO-like timestamps for fmt_time_12h
+    char iso_buf[32];
+    snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", plag_h, plag_m);
+    std::string plag_str = fmt_time_12h(iso_buf);
+    snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", maariv_h, maariv_m);
+    std::string maariv_str = fmt_time_12h(iso_buf);
+    zmanim = str_sprintf("Mincha: 12:30 PM | Plag: %s | Maariv: %s",
+      plag_str.c_str(), maariv_str.c_str());
   }
 
   // Melachot
@@ -288,9 +324,9 @@ static void render_shabbos(
     int yr, int mo, int dy, int hr, int mi, int dow,
     int geoname_idx) {
 
-  std::string hdr, ct, ci, ht, hi, hd, ed, ph, pt, paf, ds, up, ms, ss, ft;
+  std::string hdr, ct, ci, ht, hi, hd, ed, ph, pt, paf, ds, zm, up, ms, ss, ft;
   extract_display_data(doc, yr, mo, dy, hr, mi, dow, geoname_idx,
-      hdr, ct, ci, ht, hi, hd, ed, ph, pt, paf, ds, up, ms, ss, ft);
+      hdr, ct, ci, ht, hi, hd, ed, ph, pt, paf, ds, zm, up, ms, ss, ft);
 
   auto c_bg    = Color(5, 5, 20);
   auto c_panel = Color(10, 10, 30);
@@ -317,6 +353,7 @@ static void render_shabbos(
   it.print(10, ly, font_small, c_wht, ed.c_str()); ly += 20;
   it.print(10, ly, font_small, c_gold, ms.c_str()); ly += 16;
   if (!ss.empty()) { it.print(10, ly, font_small, c_gold, ss.c_str()); ly += 16; }
+  if (!zm.empty()) { it.print(10, ly, font_small, c_dim, zm.c_str()); ly += 12; }
   if (!ds.empty()) { it.print(10, ly, font_small, c_dim, ds.c_str()); }
 
   it.filled_rectangle(242, 32, 234, 252, c_panel);
