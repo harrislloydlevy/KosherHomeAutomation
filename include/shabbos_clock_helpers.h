@@ -51,11 +51,11 @@ static std::string rtl(const std::string &s) {
   return std::string(s.rbegin(), s.rend());
 }
 
-// URL builder — 14-day window with leyning
+// URL builder — 90-day window with leyning
 static std::string build_hebcal_url(int gid, int y, int m, int d) {
   int ey = y, em = m, ed = d;
   static const int dim[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-  for (int i = 0; i < 14; i++) {
+  for (int i = 0; i < 90; i++) {
     int lim = dim[em - 1];
     if (em == 2 && (ey % 4 == 0 && (ey % 100 != 0 || ey % 400 == 0))) lim = 29;
     if (++ed > lim) { ed = 1; if (++em > 12) { em = 1; ey++; } }
@@ -143,20 +143,15 @@ static void extract_display_data(
         is_yomtov = true;
         yt_name = JSON_GET(obj, ["title"]);
       }
-  // Format upcoming into multi-line display
-  upcoming.clear();
-  for (JsonObject obj : items) {
-    const char *cat = JSON_GET(obj, ["category"]);
-    if (!strcmp(cat, "holiday")) {
-      const char *sub = JSON_GET(obj, ["subcat"]);
-      if (strcmp(sub, "minor")) {
-        std::string line = str_sprintf("%s  %s",
-          JSON_GET(obj, ["title"]), JSON_GET(obj, ["hdate"]));
-        if (!upcoming.empty()) upcoming += "\n";
-        upcoming += line;
-      }
-    }
-  }
+      if (!upcoming.empty()) upcoming += "\n";
+      upcoming += str_sprintf("%s  %s",
+        JSON_GET(obj, ["title"]), JSON_GET(obj, ["hdate"]));
+
+    } else if (!strcmp(cat, "roshchodesh")) {
+      if (!upcoming.empty()) upcoming += "\n";
+      upcoming += str_sprintf("%s  %s",
+        JSON_GET(obj, ["title"]), JSON_GET(obj, ["hdate"]));
+
     } else if (!strcmp(cat, "hebdate")) {
       if (!found_today) {
         int y2, m2, d2;
