@@ -104,7 +104,7 @@ A potential fix path: implement custom SPI writes via the `spi:` component direc
 
 ## Data Source: HebCal JSON API
 
-Fetched every 30 minutes. 14-day window starting today.
+Fetched every 30 minutes. **45-day window** starting today, with `leyning=on` for full Torah/Haftarah citations.
 
 ```
 https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&nx=on&d=on&o=on&
@@ -120,8 +120,14 @@ Key JSON categories used:
 | `candles` | Candle-lighting time (Friday), parasha name in `memo` |
 | `havdalah` | Shabbat-end time (Saturday night) |
 | `parashat` | Weekly Torah portion — `title` (English), `hebrew` (Hebrew name), `leyning.torah`, `leyning.haftarah` |
-| `holiday` | Upcoming holidays — `title`, `hdate`, `hebrew`, `yomtov` flag, `subcat` |
+| `holiday` | All holidays (major, minor, fast) — `title`, `hdate`, `hebrew`, `yomtov` flag |
+| `roshchodesh` | Rosh Chodesh — `title`, `hdate`, `hebrew` |
 | `dafyomi` | Daily Daf Yomi (if available in range) |
+| `tehillim` | Daily Psalm (if available in range) |
+
+### Response size
+
+A 45-day response with leyning is ~12-15 KB. `max_response_buffer_size: 24576` (24 KB) with `DynamicJsonDocument`. On no-PSRAM ESP32, a 90-day window with 64 KB buffer caused OOM reboots.
 
 ## Display Layout (480×320 landscape)
 
@@ -129,17 +135,19 @@ Key JSON categories used:
 ┌─── Header (Heb date | Day Date | City) ───────────────────────┐  y=0, h=28
 ├───────────────────────────────────────────────────────────────┤
 │ ┌─── Left panel (w=234) ───┐ ┌─── Right panel (w=234) ────┐  │  y=32, h=252
-│ │ [icon] 5:11 PM (gold)    │ │ Hebrew parasha name (large)  │  │
-│ │ [icon] 6:08 PM (gold)    │ │ Torah: Devarim 21:10-25:19  │  │
-│ │ ──────── divider ────────│ │ Haftarah: Isaiah 54:1-10    │  │
+│ │   [icon] 5:11 PM (gold)  │ │ Hebrew parasha name (large)  │  │
+│ │   [icon] 6:08 PM (gold)  │ │ [icon] Torah: Devarim ...    │  │  dividers
+│ │ ──────── divider ────────│ │ Haftarah: Isaiah ...         │  │  at y=88
 │ │ Today                    │ │ ──────── divider ──────────│  │
 │ │ Hebrew date (large)      │ │ Upcoming                    │  │
-│ │ English date             │ │ Rosh Hashana  1 Tishrei...  │  │
-│ │ Melachot status          │ │ Yom Kippur   10 Tishrei...  │  │
-│ │ Shofar / Daily study     │ │                             │  │
+│ │ English date             │ │ Rosh Hashana  1 Tishrei ... │  │
+│ │ Melachot status          │ │ Yom Kippur  10 Tishrei ...  │  │
+│ │ Shofar status            │ │ Sukkot  15 Tishrei ...      │  │
+│ │ Mincha 12:30 | Plag ...  │ │                             │  │
+│ │ Daf Yomi ... | Rambam    │ │                             │  │
 │ └──────────────────────────┘ └──────────────────────────────┘  │
 ├───────────────────────────────────────────────────────────────┤
-│ Elul | Sydney             Swipe L: location  R: WiFi          │  y=288, h=32
+│        Swipe Left to set location, Swipe Right to setup WiFi  │  y=288, h=32
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -151,14 +159,17 @@ LVGL was removed because it renders text through a software rotation layer with 
 ### `rotation:` over `transform:`
 The `rotation:` parameter sends CASET/PASET **after** updating MADCTL. `transform:` sends them **before**. This makes `rotation:` the correct choice for this display. `rotation: 270` causes a blank screen (unknown why); `rotation: 90` + `transform: {mirror_y: true}` works correctly.
 
-### Hebrew RTL
-ESPHome's `it.print()` renders left-to-right. Hebrew text is reversed via `rtl()` before printing: `std::string(s.rbegin(), s.rend())`. This makes Hebrew readable when rendered LTR on the display.
+### Hebrew RTL & Geresh Fix
+ESPHome's `it.print()` renders left-to-right. Hebrew text is reversed via a **UTF-8 code-point-aware** `rtl()` function (`std::string(s.rbegin(), s.rend())` reverses BYTES, corrupting multi-byte Hebrew). The geresh character (U+05F3, used in every Hebrew date like `ז׳ אלול`) must be explicitly included in the font glyph list — missing it causes all Hebrew to render blank.
+
+### Zmanim Estimation
+Mincha Gedola (12:30 PM), Plag HaMincha (sunset − 75 min), and Earliest Maariv (sunset + 50 min) are estimated from the nearest available sunset data. Sunset is derived from candle-lighting time (candle + 18 min = sunset for Friday) or havdalah time (havdalah − 50 min = sunset for Saturday).
 
 ### ESPTime day_of_week Convention
-`ESPTime::day_of_week` uses: **1 = Sunday**, 2 = Monday, ... 7 = Saturday. (This differs from the comment in ESPHome source which says 1=Monday.)
+`ESPTime::day_of_week` uses: **1 = Sunday**, 2 = Monday, ... 7 = Saturday.
 
-### JsonDocument size
-The 14-day HebCal response with `leyning=on` is ~3-4 KB. Stored in a `JsonDocument` global with `max_response_buffer_size: 16384`.
+### JsonDocument & Memory
+A 45-day response with `leyning=on` is ~12-15 KB. Buffer is 24 KB. Extending to 90 days with a 64 KB buffer caused OOM reboots on no-PSRAM. All rendering uses a template function (`render_shabbos`) in the .h file to avoid YAML lambda parsing issues.
 
 ## Touch: Geoname Cycling
 
@@ -214,9 +225,30 @@ Calibration from corner taps:
 - `board_cyd35.yaml` — Board pins, SPI bus, boot button (includes display_cyd35.yaml)
 - `background.png` — 480×320 Kotel image
 
-## Hebrew Text Issue (UNRESOLVED)
+## Hebrew Text (FIXED)
 
-Hebrew text is not appearing on screen. The `rtl()` function reverses the string for RTL display, but Hebrew characters may not be rendering. Possible causes:
-- The `alef_mid` font at size 16 might not include the Hebrew glyphs needed
-- The Unicode escapes in the YAML might not match the actual HebCal response characters
-- The reversed string might contain control characters or incorrect UTF-8 sequences
+Hebrew text not rendering was caused by two issues:
+
+1. **Missing geresh** (U+05F3) in the font glyph list. Every HebCal Hebrew date uses it (`"hebrew": "ז׳ אלול"`). Without it, the font renderer skips the character and the string appears blank.
+2. **Byte-level reversal** in the original `rtl()` function. `std::string::rbegin()/rend()` reverses bytes, which corrupts multi-byte UTF-8 characters. Fixed by walking code-point boundaries instead.
+
+**Font:** Both `alef` (size 12) and `alef_mid` (size 16) include: standard Hebrew letters (U+05D0–05EA), final forms (U+05DA, 05DD, 05DF, 05E3, 05E5), geresh (U+05F3), gershayim (U+05F4), and niqqud (U+05B0–05C2).
+
+**MDI icons:** candle (U+F17D3), sunset (U+F059B), book (U+F1CCC), synagogue (U+F1B04), Magen David (U+F097A), menorah (U+F05E2), calendar (U+F00EE).
+
+## Recent UI Changes
+
+| Change | Detail |
+|--------|--------|
+| **Dividers aligned** | Grey dividers in left and right panels now at same Y position (y=88) |
+| **Candle/Havdalah centered** | Icons + times centered in left panel |
+| **Book icon** | MDI book (U+F1CCC) before Torah citation |
+| **Holiday icons** | Synagogue, menorah, calendar, Magen David added to mdi font |
+| **Hebrew dates** | Upcoming events show English + Hebrew date without year |
+| **All holidays** | No filter — maj/minor/fast/roshchodesh all displayed |
+| **Daily study** | Daf Yomi + Tehillim from HebCal, with Rambam reference |
+| **Zmanim** | Mincha (12:30 PM), Plag (sunset−75 min), Maariv (sunset+50 min) |
+| **Footer** | Centered "Swipe Left to set location, Swipe Right to setup WiFi" |
+| **No duplicate info** | City/date removed from footer (already in header) |
+| **45-day window** | Covers all Tishrei holidays (Rosh Hashana → Simchat Torah) |
+| **24 KB buffer** | Prevents OOM reboot on no-PSRAM (was 64 KB / 90 days) |
