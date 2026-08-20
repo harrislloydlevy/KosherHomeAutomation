@@ -132,6 +132,11 @@ font:
     glyphs:
       - "\U000F17D3" # candle
       - "\U000F059B" # sunset/havdalah
+      - "\U000F1CCC" # book
+      - "\U000F1B04" # synagogue
+      - "\U000F097A" # Magen David
+      - "\U000F05E2" # menorah
+      - "\U000F00EE" # calendar
 
 image:
   - file: background.png

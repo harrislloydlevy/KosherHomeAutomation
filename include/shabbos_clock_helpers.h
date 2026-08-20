@@ -157,13 +157,28 @@ static void extract_display_data(
         yt_name = JSON_GET(obj, ["title"]);
       }
       if (!upcoming.empty()) upcoming += "\n";
-      upcoming += str_sprintf("%s  %s",
-        JSON_GET(obj, ["title"]), JSON_GET(obj, ["hdate"]));
+      {
+        const char *hd = JSON_GET(obj, ["hdate"]);
+        const char *hb = JSON_GET(obj, ["hebrew"]);
+        // Strip year from hdate (last 5 chars " 5787")
+        std::string hd_short(hd);
+        size_t sp = hd_short.rfind(' ');
+        if (sp != std::string::npos) hd_short.resize(sp);
+        upcoming += str_sprintf("%s  %s  %s",
+          JSON_GET(obj, ["title"]), hd_short.c_str(), hb);
+      }
 
     } else if (!strcmp(cat, "roshchodesh")) {
       if (!upcoming.empty()) upcoming += "\n";
-      upcoming += str_sprintf("%s  %s",
-        JSON_GET(obj, ["title"]), JSON_GET(obj, ["hdate"]));
+      {
+        const char *hd = JSON_GET(obj, ["hdate"]);
+        const char *hb = JSON_GET(obj, ["hebrew"]);
+        std::string hd_short(hd);
+        size_t sp = hd_short.rfind(' ');
+        if (sp != std::string::npos) hd_short.resize(sp);
+        upcoming += str_sprintf("%s  %s  %s",
+          JSON_GET(obj, ["title"]), hd_short.c_str(), hb);
+      }
 
     } else if (!strcmp(cat, "hebdate")) {
       if (!found_today) {
@@ -291,10 +306,11 @@ static void render_shabbos(
 
   it.filled_rectangle(4, 32, 234, 252, c_panel);
   int ly = 36;
-  it.print(10, ly, font_icons, c_gold, ci.c_str());
-  it.print(32, ly, font_mid, c_gold, ct.c_str()); ly += 22;
-  it.print(10, ly, font_icons, c_gold, hi.c_str());
-  it.print(32, ly, font_mid, c_gold, ht.c_str()); ly += 24;
+  it.print(84, ly, font_icons, c_gold, ci.c_str());
+  it.print(104, ly, font_mid, c_gold, ct.c_str()); ly += 22;
+  it.print(84, ly, font_icons, c_gold, hi.c_str());
+  it.print(104, ly, font_mid, c_gold, ht.c_str()); ly += 24;
+  ly += 6;
   it.filled_rectangle(8, ly, 226, 1, c_div); ly += 6;
   it.print(10, ly, font_small, c_dim, "Today"); ly += 16;
   it.print(10, ly, font_mid, c_wht, hd.c_str()); ly += 20;
@@ -306,12 +322,25 @@ static void render_shabbos(
   it.filled_rectangle(242, 32, 234, 252, c_panel);
   int ry = 36;
   if (!ph.empty()) { it.print(248, ry, font_mid, c_wht, ph.c_str()); ry += 22; }
-  it.print(248, ry, font_small, c_wht, pt.c_str()); ry += 14;
+  it.print(248, ry, font_icons, c_dim, "\U000F1CCC");
+  it.print(266, ry, font_small, c_wht, pt.c_str()); ry += 14;
   it.print(248, ry, font_small, c_wht, paf.c_str()); ry += 18;
+  ry += 4;
   it.filled_rectangle(246, ry, 226, 1, c_div); ry += 6;
   if (!up.empty()) {
     it.print(248, ry, font_small, c_dim, "Upcoming"); ry += 14;
-    it.print(248, ry, font_small, c_wht, up.c_str()); ry += 14;
+    // Display each holiday line
+    std::string::size_type pos = 0;
+    while (true) {
+      auto nl = up.find('\n', pos);
+      if (nl == up.npos) {
+        it.print(248, ry, font_small, c_wht, up.substr(pos).c_str());
+        break;
+      }
+      it.print(248, ry, font_small, c_wht, up.substr(pos, nl - pos).c_str());
+      ry += 14;
+      pos = nl + 1;
+    }
   }
 
   it.filled_rectangle(0, 287, 480, 1, c_div);
