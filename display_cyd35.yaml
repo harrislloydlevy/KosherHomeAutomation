@@ -18,63 +18,22 @@ display:
     dc_pin:
       number: GPIO2
       ignore_strapping_warning: true
-    data_rate: 20MHz
-    update_interval: never
+    data_rate: 40MHz
     auto_clear_enabled: false
-    rotation: 270
+    rotation: 90
+    transform:
+      mirror_y: true
+      mirror_x: false
+      swap_xy: false
     dimensions:
       width: 320
       height: 480
 
     lambda: |-
         auto t = id(sntp_time).now();
-
-        std::string hdr, ct, cl, ht, hl, hd, ed, pn, pt, ph, ut, ud, ms, ss, ft;
-        extract_display_data(id(doc), t.year, t.month, t.day_of_month,
-            t.hour, t.minute, t.day_of_week, id(geoname_idx),
-            hdr, ct, cl, ht, hl, hd, ed, pn, pt, ph, ut, ud, ms, ss, ft);
-
-        const auto CLR_BG    = Color(5, 5, 20);
-        const auto CLR_PANEL = Color(10, 10, 30);
-        const auto CLR_GOLD  = Color(255, 200, 100);
-        const auto CLR_WHT   = Color(255, 255, 255);
-        const auto CLR_DIM   = Color(160, 160, 160);
-        const auto CLR_DIV   = Color(50, 50, 40);
-
-        it.image(0, 0, id(background));
-        it.filled_rectangle(0, 0, 480, 28, CLR_BG);
-        it.print(32, 6, id(alef), CLR_WHT, hdr.c_str());
-        it.filled_rectangle(4, 4, 22, 20, CLR_PANEL);
-        it.print(8, 6, id(alef), CLR_GOLD, "G");
-
-        it.filled_rectangle(4, 32, 234, 252, CLR_PANEL);
-        int ly = 36;
-        it.print(10, ly, id(alef_mid), CLR_GOLD, ct.c_str()); ly += 20;
-        it.print(10, ly, id(alef), CLR_WHT, cl.c_str()); ly += 18;
-        it.print(10, ly, id(alef_mid), CLR_GOLD, ht.c_str()); ly += 20;
-        it.print(10, ly, id(alef), CLR_WHT, hl.c_str()); ly += 22;
-        it.filled_rectangle(8, ly, 226, 1, CLR_DIV); ly += 6;
-        it.print(10, ly, id(alef), CLR_DIM, "Today"); ly += 16;
-        it.print(10, ly, id(alef_mid), CLR_WHT, hd.c_str()); ly += 20;
-        it.print(10, ly, id(alef), CLR_WHT, ed.c_str()); ly += 22;
-        it.print(10, ly, id(alef), (ms.find("prohibited") != std::string::npos) ? CLR_GOLD : CLR_DIM, ms.c_str()); ly += 16;
-        if (!ss.empty()) it.print(10, ly, id(alef), CLR_GOLD, ss.c_str());
-
-        it.filled_rectangle(242, 32, 234, 252, CLR_PANEL);
-        int ry = 36;
-        it.print(248, ry, id(alef), CLR_DIM, "Parashat HaShavua"); ry += 16;
-        it.print(248, ry, id(alef_mid), CLR_WHT, pn.c_str()); ry += 22;
-        it.print(248, ry, id(alef), CLR_WHT, pt.c_str()); ry += 14;
-        it.print(248, ry, id(alef), CLR_WHT, ph.c_str()); ry += 18;
-        it.filled_rectangle(246, ry, 226, 1, CLR_DIV); ry += 6;
-        it.print(248, ry, id(alef), CLR_DIM, "Next"); ry += 16;
-        it.print(248, ry, id(alef_mid), CLR_GOLD, ut.c_str()); ry += 20;
-        it.print(248, ry, id(alef), CLR_WHT, ud.c_str());
-
-        it.filled_rectangle(0, 287, 480, 1, CLR_DIV);
-        it.filled_rectangle(240, 32, 1, 252, CLR_DIV);
-        it.filled_rectangle(0, 288, 480, 32, CLR_BG);
-        it.print(6, 296, id(alef), CLR_WHT, ft.c_str());
+        render_shabbos(it, id(doc), id(alef), id(alef_mid), id(mdi), id(background),
+            t.year, t.month, t.day_of_month,
+            t.hour, t.minute, t.day_of_week, id(geoname_idx));
 
 touchscreen:
   - id: main_touchscreen
@@ -93,12 +52,4 @@ touchscreen:
       mirror_x: true
     on_touch:
       - lambda: |-
-          if (touch.x < 28 && touch.y < 28) {
-            static int idx = 0;
-            idx = (idx + 1) % GEONAME_COUNT;
-            id(geoname_id) = GEONAME_PRESETS[idx];
-            id(geoname_idx) = idx;
-            ESP_LOGI("geo", "Switched to %s (geonameid=%d)",
-                     GEONAME_CITIES[idx], GEONAME_PRESETS[idx]);
-            id(get_jdate)->execute();
-          }
+          static int idx = 0;

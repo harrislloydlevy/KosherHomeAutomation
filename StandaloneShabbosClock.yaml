@@ -124,6 +124,13 @@ font:
       - "\u05F4"
       - "\u05B0\u05B1\u05B2\u05B3\u05B4\u05B5\u05B6\u05B7\u05B8\u05B9\u05BB\u05BC\u05BD\u05C1\u05C2"
 
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: mdi
+    size: 16
+    glyphs:
+      - "\U000F17D3" # candle
+      - "\U000F059B" # sunset/havdalah
+
 image:
   - file: background.png
     id: background
