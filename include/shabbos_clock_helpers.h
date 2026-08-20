@@ -46,9 +46,22 @@ static const char *mon_full(int m) {
   return (m >= 1 && m <= 12) ? n[m-1] : "?";
 }
 
-// Reverse a string for RTL display (ESPHome prints LTR)
+// Reverse a UTF-8 string by code-point (not by byte) for RTL display
 static std::string rtl(const std::string &s) {
-  return std::string(s.rbegin(), s.rend());
+  std::string result;
+  const char *end = s.c_str() + s.size();
+  const char *p = end;
+  while (p > s.c_str()) {
+    p--;
+    while (p > s.c_str() && ((*p) & 0xC0) == 0x80) p--;
+    unsigned char c = *p;
+    int len = 1;
+    if ((c & 0xE0) == 0xC0) len = 2;
+    else if ((c & 0xF0) == 0xE0) len = 3;
+    else if ((c & 0xF8) == 0xF0) len = 4;
+    result.append(p, len);
+  }
+  return result;
 }
 
 // URL builder — 45-day window with leyning
@@ -304,6 +317,5 @@ static void render_shabbos(
   it.filled_rectangle(0, 287, 480, 1, c_div);
   it.filled_rectangle(240, 32, 1, 252, c_div);
   it.filled_rectangle(0, 288, 480, 32, c_bg);
-  it.print(6, 296, font_small, c_dim, ft.c_str());
-  it.print(240, 296, font_small, c_dim, "Swipe L: location  R: WiFi");
+  it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Left to set location, Swipe Right to setup Wifi");
 }
