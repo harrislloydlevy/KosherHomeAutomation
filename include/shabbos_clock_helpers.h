@@ -51,11 +51,11 @@ static std::string rtl(const std::string &s) {
   return std::string(s.rbegin(), s.rend());
 }
 
-// URL builder — 90-day window with leyning
+// URL builder — 45-day window with leyning
 static std::string build_hebcal_url(int gid, int y, int m, int d) {
   int ey = y, em = m, ed = d;
   static const int dim[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-  for (int i = 0; i < 90; i++) {
+  for (int i = 0; i < 45; i++) {
     int lim = dim[em - 1];
     if (em == 2 && (ey % 4 == 0 && (ey % 100 != 0 || ey % 400 == 0))) lim = 29;
     if (++ed > lim) { ed = 1; if (++em > 12) { em = 1; ey++; } }
