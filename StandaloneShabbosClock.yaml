@@ -8,6 +8,17 @@ substitutions:
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
 
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  includes:
+    - include/shabbos_clock_helpers.h
+  on_boot:
+    - priority: -100
+      then:
+        - logger.log: "Booted — fetching HebCal data"
+        - script.execute: get_jdate
+
 packages:
   board: !include ./board_cyd35.yaml
 
@@ -20,48 +31,21 @@ globals:
     type: int
     initial_value: '2147714'
     restore_value: true
+  - id: geoname_idx
+    type: int
+    initial_value: '0'
+    restore_value: false
 
 script:
   - id: get_jdate
     mode: restart
     then:
-      - logger.log: "Getting HebCal data"
+      - logger.log: "Fetching HebCal data"
       - http_request.get:
-            max_response_buffer_size: 8192
+            max_response_buffer_size: 16384
             url: !lambda |-
-                  char buf[256];
-                  auto time = id(sntp_time).now();
-                  auto end_time = id(sntp_time).now();
-
-                  // Yes this is the best way to do this. ESPTime struct doesn't
-                  // have many helper funcs.
-                  for (int i = 0; i < 7; i++) {
-                    end_time.increment_day();
-                  }
-
-                  const char *url_fmt = "http://www.hebcal.com/hebcal?v=1&cfg=json&"
-                                        "maj=on&" 
-                                        "min=on&"
-                                        "mod=on&"
-                                        "nx=on&"
-                                        "d=on&"
-                                        "o=on&"
-                                        "molad=on&"
-                                        "ss=on&"
-                                        "mf=on&"
-                                        "c=on&"
-                                        "geo=geoname&"
-                                        "M=on&"
-                                        "s=on&"
-                                        "geonameid=%d&"
-                                        "dps=on&"
-                                        "dr1=on&"
-                                        "dr3=on&"
-                                        "F=on&"
-                                        "&start=%04d-%02d-%02d&end=%04d-%02d-%02d";
-                  snprintf(buf, 256, url_fmt, id(geoname_id), time.year, time.month, time.day_of_month, end_time.year, end_time.month, end_time.day_of_month);
-                  ESP_LOGI("url", buf);
-                  return buf;
+                auto t = id(sntp_time).now();
+                return build_hebcal_url(id(geoname_id), t.year, t.month, t.day_of_month);
             capture_response: true
             on_response:
               then:
@@ -70,125 +54,14 @@ script:
                         lambda: return response->status_code == 200;
                     then:
                         - lambda: |-
-                            // Size estimates from: https://arduinojson.org/v6/assistant/#/step1 and doubled.
-                            #define JSON_GET(obj, key) ((obj)key | "")
-                            #define JSON_DBG(obj, key) ESP_LOGI("json", "%s: %s", #key, JSON_GET(obj, key))
                             ESP_LOGI("http_body", "Content Length: %d", response->content_length);
-                            ESP_LOGI("http_body", "Body Length: %d", body.length());
-                            ESP_LOGI("http_body", body.c_str());
-                            deserializeJson(id(doc), body);
-                            JSON_DBG(id(doc), ["location"]["city"]);
-                            JSON_DBG(id(doc), ["items"][0]["hdate"]);
+                            parse_hebcal_response(id(doc), body);
+                        - lambda: |-
+                            id(main_display).update();
                     else:
                         - logger.log:
-                            format: "Error: Response status: %d, message %s"
-                            args: [ 'response->status_code', 'body.c_str()' ]
-                        - lambda: |-
-                            lv_label_set_text
-                            (
-                               head_text,
-                               str_sprintf("Error Accessing HebCal.org\nCode: %d | Error: %s", response->status_code, body.c_str()).c_str()
-                            );
-                              
-
-
-  - id: display_jdate
-    mode: restart
-    then:
-      - logger.log: "Writing Update"
-      - lambda: |-
-          bool printed_date = false;
-          const char *city = JSON_GET(id(doc), ["location"]["city"]);
-          const char *eng_eng_date = JSON_GET(id(doc), ["items"][0]["date"]);
-          const char *eng_heb_date = JSON_GET(id(doc), ["items"][0]["title"]);
-          const char *heb_heb_date = JSON_GET(id(doc), ["items"][0]["hebrew"]);
-
-          const char *curr_heb_date = NULL;
-          const char *curr_eng_date = NULL;
-
-          int item_num = 0;
-          int cur_y=0;
-          std::string icons;
-          std::string content;
-
-          // How is the str_sprintf not a memory leak here? C++ and std::str freaks me out still.
-          lv_label_set_text
-          (
-            head_text,
-            str_sprintf
-            (
-              "%s|%s\n%s|%s",
-              eng_heb_date, 
-              heb_heb_date,
-              eng_eng_date,
-              city
-            ).c_str()
-          );
-
-          // Now we print upcoming events.
-          JsonArray events = id(doc)["items"];
-
-          for (JsonObject obj : events ) {
-            const char *cat = JSON_GET(obj, ["category"]);
-            ESP_LOGI("json", "Event %d type = %s", item_num++, cat);
-
-            if (!strcmp(cat,"hebdate")) {
-              // We don't print anything for seeing hebrew date - just update
-              // the current date to use in other things.
-              JSON_DBG(obj, ["title"]);
-              JSON_DBG(obj, ["date"]);
-
-              curr_heb_date = JSON_GET(obj, ["title"]);
-              curr_eng_date = JSON_GET(obj, ["date"]) + 5; // Skip year
-            } else if (!strcmp(cat,"holiday")) {
-              // Synagogue Icon
-              icons += "\U000F1B0F\n";
-              content += JSON_GET(obj, ["title"]);
-              content += " | ";
-              content += JSON_GET(obj, ["date"]);
-              content += "\n";
-              content += JSON_GET(obj, ["hebrew"]);
-              content += " | ";
-              content += JSON_GET(obj, ["hdate"]);
-              content += "\n";
-
-              
-              if (JSON_GET(obj, ["yomtov"]) != NULL) {
-                icons += "\U000F1CCC\n";
-                content += JSON_GET(obj, ["leyning"]["torah"]);
-                content += "\n";
-                content += JSON_GET(obj, ["leyning"]["haftarah"]);
-                content += "\n";
-              }
-
-            } else if (!strcmp(cat, "candles")) {
-              // Candles Icon
-              icons += "\U000F17D3\n";
-              JSON_DBG(obj, ["memo"]);
-              content += JSON_GET(obj, ["memo"]);
-              content += "\n";
-              content += curr_eng_date;
-              content += ": ";
-              content += JSON_GET(obj, ["title"]);
-              content += "\n";
-            } else if (!strcmp(cat, "havdalah")) {
-              icons += "\U000F059B\n";
-              content += JSON_GET(obj, ["title"]);
-              content += "\n\n";
-            } else if (!strcmp(cat, "parashat")) {
-              icons += "\U000F1CCC\n";
-              content += JSON_GET(obj, ["leyning"]["torah"]);
-              content += "\n";
-              content += JSON_GET(obj, ["leyning"]["haftarah"]);
-              content += "\n";
-            }
-          }
-
-          // BY this point icont_text and main_text should be filled. Now write them to the sscreen
-          ESP_LOGI("screen", "Updating Text Labels");
-          // Again this seems something I shoudl free!
-          lv_label_set_text(main_label, content.c_str());;
-          lv_label_set_text(icon_label, icons.c_str());
+                            format: "HTTP error: %d"
+                            args: ['response->status_code']
 
   - id: set_location
     mode: restart
@@ -196,52 +69,8 @@ script:
       search_id: int
     then:
       - lambda: |-
-          lv_label_set_text(geoname_lookup_status,"Searching API..");
-      # Example uses the free geonames.org JSON endpoint (Replace 'demo' with your real GeoNames username)
-      - http_request.get:
-          url: !lambda |-
-              std::string url =  std::string("http://www.hebcal.com/hebcal?v=1&cfg=json&geo=geoname&geonameid=") + std::to_string(search_id);
-              ESP_LOGI("set_loc", "URL is %s", url.c_str());
-              return url;
-          capture_response: true
-          max_response_buffer_size: 2048
-          on_response:
-            then:
-              - lambda: |-
-                  // Check if the server returned a valid 200 OK
-                  if (response->status_code == 200) {
-                      id(geoname_id) = search_id;
-
-                      // Now to udpate teh main page with new location
-                      id(get_jdate)->execute();
-                      id(display_jdate)->execute();
-
-                      // And return to main
-                      lv_screen_load(id(main_page).obj);
-                  } else if (response->status_code == 404) {
-                      lv_label_set_text(geoname_lookup_status, "Unknown Location");
-                  } else {
-                      std::string message = "Server Error: ";
-                      message += to_string(response->status_code);
-                      lv_label_set_text(geoname_lookup_status, message.c_str());
-                  }
-          on_error:
-            then:
-              - lambda: |-
-                  lv_label_set_text(geoname_lookup_status, "Network Error!");
-
-# ============================================================ 
-# ESPHome YAML start
-#
-esphome:
-  name: ${name}
-  friendly_name: ${friendly_name}
-  on_boot:
-    - priority: -100
-      then:
-        - logger.log: "Booted Screen"
-        - script.execute: display_jdate
-
+          id(geoname_id) = search_id;
+      - script.execute: get_jdate
 
 logger:
 
@@ -252,8 +81,6 @@ ota:
 wifi:
   ssid: ${wifi_ssid}
   password: ${wifi_password}
-
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Shabbos Clock Setup"
 
@@ -269,169 +96,33 @@ time:
      - 2.pool.ntp.org
     on_time:
       - seconds: 0
-        hours: /12
+        minutes: /30
         then:
-          - lambda: |-
-              id(set_location).execute(id(geoname_id));
           - script.execute: get_jdate
-          - script.execute: display_jdate
     on_time_sync:
       then:
-        - lambda: |-
-              id(set_location).execute(id(geoname_id));
         - script.execute: get_jdate
-        - script.execute: display_jdate
 
-lvgl:
-  displays: [main_display]
-  touchscreens: [main_touchscreen]
-  rotation: 90  # 480x320 landscape. If the display is upside-down, change to 270.
-  pages:
-    - id: main_page
-      widgets:
-        - button:
-            id: go_to_geo
-            width: 20
-            height: 20
-            x: 8
-            y: 8
-            widgets:
-              - label:
-                  text: "Geo"
-                  align: CENTER
-            on_click:
-              then:
-                - lvgl.page.show: geoname_page
-        - label:
-            text_font: alef
-            align: top_mid
-            id: head_text 
-            y: 8
-            text: "ES3C28P Demo"
-        - label:
-            id: main_label
-            align: top_left
-            x: 36
-            y: 36
-            text_font: alef
-            width: 100%
-            text: |-
-              1234567890123456789012345678901234567890
-              2
-              3
-              4
-              5
-              6
-              7
-              8
-              9
-              10
-              11
-              12
-        - label:
-            id: icon_label
-            align: top_left
-            x: 0
-            y: 36
-            text_font: mdi
-            width: 100%
-            text: ""
-    - id: geoname_page
-      widgets:
-        - button:
-            id: go_to_main
-            width: 20
-            height: 20
-            x: 8
-            y: 8
-            widgets:
-              - label:
-                  text: "<-"
-                  align: CENTER
-            on_click:
-              then:
-                - lvgl.page.show: main_page
-
-        - label:
-            text: "Geoname ID Settings"
-            text_font: alef
-            align: top_mid
-            y: 8
-
-        - label:
-            id: geoname_lookup_status
-            text: "Enter the 6-digit Geoname.org ID for your location"
-            text_font: alef
-            align: top_mid
-            x: 0
-            y: 30
-            width: 80%
-            height: 20
-
-        # Textarea to display current ID and accept new input
-        - textarea:
-            id: geoname_input
-            align: top_mid
-            x: 0
-            y: 60
-            width: 80%
-            height: 20
-
-            one_line: true
-            # On startup keep it blank
-            text: ""
-
-        # On-screen keyboard for number entry (Geoname IDs are numbers)
-        - keyboard:
-            id: num_keyboard
-            align: top_mid
-            x: 0
-            y: 100
-            width: 440
-            height: 180
-
-            # Restrict keyboard to digits/punctuation for easy ID input
-            mode: NUMBER
-            textarea: geoname_input
-            on_ready:
-              - then:
-                - lambda: |-
-                    ESP_LOGI("config", "New Geoname ID entered: %s", lv_textarea_get_text(id(geoname_input)));
-
-                    id(set_location)->execute(atoi(lv_textarea_get_text(id(geoname_input))));
-
-
-# gET CODES FROM: https://pictogrammers.github.io/@mdi/font/7.4.47/
 font:
   - file: "gfonts://Noto Sans Hebrew"
     id: alef
     size: 12
     glyphs:
-      - " !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`{|}~’"
+      - " !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`{|}~"
       - "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-      - "אבגדהוזחטיכלמנסעפצקרשתךםןףץ"
-      - "״"
-      # Nkkudot
+      - "\u05D0\u05D1\u05D2\u05D3\u05D4\u05D5\u05D6\u05D7\u05D8\u05D9\u05DB\u05DC\u05DE\u05E0\u05E1\u05E2\u05E4\u05E6\u05E7\u05E8\u05E9\u05EA\u05DA\u05DD\u05DF\u05E3\u05E5"
+      - "\u05F4"
       - "\u05B0\u05B1\u05B2\u05B3\u05B4\u05B5\u05B6\u05B7\u05B8\u05B9\u05BB\u05BC\u05BD\u05C1\u05C2"
-  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
-    id: mdi
-    size: 32
-    glyphs:
-      - "\U000F05e2" # Menorah
-      - "\U000F17D3" # Candelabra  List
-      - "\U000F059B" # Sunset
-      - "\U000F1B04" # Synagogue
-      - "\U000F097A" # Magen David
-      - "\U000F1CCC" # Book
-      - "\U000F00EE" # Empty Calendar
-      - "\U000F0241" # Flash Symbol
 
-  # Need a smaller version to fit inside the calendar
-  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
-    id: mdi_small
-    size: 18
+  - file: "gfonts://Noto Sans Hebrew"
+    id: alef_mid
+    size: 16
     glyphs:
-      - "\U000F097A" # Magen David
+      - " !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`{|}~"
+      - "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+      - "\u05D0\u05D1\u05D2\u05D3\u05D4\u05D5\u05D6\u05D7\u05D8\u05D9\u05DB\u05DC\u05DE\u05E0\u05E1\u05E2\u05E4\u05E6\u05E7\u05E8\u05E9\u05EA\u05DA\u05DD\u05DF\u05E3\u05E5"
+      - "\u05F4"
+      - "\u05B0\u05B1\u05B2\u05B3\u05B4\u05B5\u05B6\u05B7\u05B8\u05B9\u05BB\u05BC\u05BD\u05C1\u05C2"
 
 image:
   - file: background.png
@@ -440,6 +131,5 @@ image:
     type: RGB565
 
 api:
- encryption:
-   key: ${api_key}
-
+  encryption:
+    key: ${api_key}
