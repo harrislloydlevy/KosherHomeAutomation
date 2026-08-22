@@ -189,6 +189,9 @@ static void extract_display_data(
           JSON_GET(obj, ["title"]), hd_short.c_str(), hb);
       }
 
+    } else if (!strcmp(cat, "omer")) {
+      if (!melachot_status.empty()) melachot_status += "\n";
+      melachot_status += JSON_GET(obj, ["title"]);
     } else if (!strcmp(cat, "hebdate")) {
       if (!found_today) {
         int y2, m2, d2;
@@ -300,15 +303,15 @@ static void extract_display_data(
       plag_str.c_str(), maariv_str.c_str());
   }
 
-  // Melachot
-  std::string ct_display = candles_time;
-  std::string ht_display = havdalah_time;
-  if (is_yomtov)
-    melachot_status = str_sprintf("Yom Tov: %s", yt_name);
-  else if (is_shabbat)
-    melachot_status = str_sprintf("Melachot prohibited from %s until %s", ct_display.c_str(), ht_display.c_str());
-  else
-    melachot_status = "Weekday \u2014 Melachot permitted";
+  // Today notes (omer, selichot season, etc.)
+  if (is_elul) {
+    if (!melachot_status.empty()) melachot_status += "\n";
+    melachot_status += "Selichot season";
+  }
+  if (is_tishrei) {
+    if (!melachot_status.empty()) melachot_status += "\n";
+    melachot_status += "Selichot / Yomim Noraim";
+  }
 
   // Shofar
   if (blow_shofar)
@@ -428,14 +431,30 @@ static void render_shabbos(
       pos = nl + 1;
     }
   }
+  if (!ms.empty()) {
+    std::string::size_type pos = 0;
+    while (true) {
+      auto nl = ms.find('\n', pos);
+      if (nl == ms.npos) {
+        it.print(x, y, font_small, c_gold, ms.substr(pos).c_str());
+        break;
+      }
+      it.print(x, y, font_small, c_gold, ms.substr(pos, nl - pos).c_str());
+      y += 16;
+      pos = nl + 1;
+    }
+  }
 
   // ---- Bottom-Right: Upcoming ---------------------------------------------
   x = 194; y = 149;
   it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_b, c_bg);
   if (!up.empty()) {
     std::string::size_type pos = 0;
+    bool first = true;
     while (true) {
       auto nl = up.find('\n', pos);
+      if (!first) y += 10;
+      first = false;
       if (nl == up.npos) {
         it.print(x, y, font_small, c_wht, up.substr(pos).c_str());
         break;

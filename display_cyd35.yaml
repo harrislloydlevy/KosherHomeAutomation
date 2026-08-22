@@ -20,6 +20,7 @@ display:
       ignore_strapping_warning: true
     data_rate: 40MHz
     auto_clear_enabled: false
+    update_interval: 30s
     rotation: 90
     transform:
       mirror_y: true
