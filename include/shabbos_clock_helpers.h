@@ -85,9 +85,62 @@ static std::string build_hebcal_url(int gid, int y, int m, int d) {
   return std::string(buf);
 }
 
+static std::string build_zmanim_url(int gid, int y, int m, int d) {
+  char buf[160];
+  snprintf(buf, sizeof(buf),
+    "https://www.hebcal.com/zmanim?cfg=json&geonameid=%d&date=%04d-%02d-%02d",
+    gid, y, m, d);
+  return std::string(buf);
+}
+
 static std::string build_geoname_url(int gid) {
   return str_sprintf(
     "http://www.hebcal.com/hebcal?v=1&cfg=json&geo=geoname&geonameid=%d", gid);
+}
+
+static bool parse_zmanim_response(JsonDocument &doc, const std::string &body) {
+  DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    ESP_LOGE("zmanim", "JSON error: %s", err.c_str());
+    return false;
+  }
+  ESP_LOGI("zmanim", "Parsed %d bytes OK", (int)body.length());
+  return true;
+}
+
+static std::string fmt_time_from_api(const char *iso_dt) {
+  if (!iso_dt || !*iso_dt) return "--:--";
+  int h = 0, m = 0;
+  char buf[64];
+  if (sscanf(iso_dt, "%*[^T]T%d:%d", &h, &m) >= 2) {
+    snprintf(buf, sizeof(buf), "T%02d:%02d:00", h, m);
+    return fmt_time_12h(buf);
+  }
+  return "--:--";
+}
+
+// Build zmanim display string from API response
+static std::string build_zmanim_string(const JsonDocument &doc) {
+  const char *mg   = JSON_GET(doc, ["times"]["mincha_gedola"]);
+  const char *plag = JSON_GET(doc, ["times"]["plag_hamincha"]);
+  const char *sun  = JSON_GET(doc, ["times"]["sunset"]);
+  if (!mg || !plag) return "";
+  std::string mincha_s = fmt_time_from_api(mg);
+  std::string plag_s   = fmt_time_from_api(plag);
+  std::string maariv_s = sun ? fmt_time_from_api(sun) : "--:--";
+  // Maariv ≈ 50 min after sunset → compute from sunset if available
+  if (sun) {
+    int h = 0, m = 0;
+    if (sscanf(sun, "%*[^T]T%d:%d", &h, &m) >= 2) {
+      m += 50;
+      if (m >= 60) { h++; m -= 60; }
+      char buf[32];
+      snprintf(buf, sizeof(buf), "T%02d:%02d:00", h, m);
+      maariv_s = fmt_time_12h(buf);
+    }
+  }
+  return str_sprintf("Mincha: %s\nPlag: %s\nMaariv: %s",
+    mincha_s.c_str(), plag_s.c_str(), maariv_s.c_str());
 }
 
 // Parse response
@@ -375,12 +428,16 @@ static void render_shabbos(
     TFont *font_mid,
     TIconFont *font_icons,
     TImage *bg_img,
+    JsonDocument &zmanim_json,
     int yr, int mo, int dy, int hr, int mi, int dow,
     int geoname_idx) {
 
   std::string hdr, ct, ci, ht, hi, hd, ed, ph, pe, pt, paf, ds, zm, up, ms, ss, ft;
   extract_display_data(doc, yr, mo, dy, hr, mi, dow, geoname_idx,
       hdr, ct, ci, ht, hi, hd, ed, ph, pe, pt, paf, ds, zm, up, ms, ss, ft);
+  // Override zmanim with API data if available
+  std::string api_zm = build_zmanim_string(zmanim_json);
+  if (!api_zm.empty()) zm = api_zm;
 
   auto c_bg    = Color(0, 0, 0);
   auto c_gold  = Color(255, 200, 100);

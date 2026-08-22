@@ -27,6 +27,8 @@ http_request:
 globals:
   - id: doc
     type: JsonDocument
+  - id: zmanim_doc
+    type: JsonDocument
   - id: geoname_id
     type: int
     initial_value: '2147714'
@@ -82,8 +84,22 @@ script:
                         - lambda: |-
                             ESP_LOGI("http_body", "Content Length: %d", response->content_length);
                             parse_hebcal_response(id(doc), body);
-                        - lambda: |-
-                            id(main_display).update();
+                        - http_request.get:
+                              max_response_buffer_size: 4096
+                              url: !lambda |-
+                                  auto t = id(sntp_time).now();
+                                  return build_zmanim_url(id(geoname_id), t.year, t.month, t.day_of_month);
+                              capture_response: true
+                              on_response:
+                                then:
+                                  - if:
+                                      condition:
+                                          lambda: return response->status_code == 200;
+                                      then:
+                                        - lambda: |-
+                                            parse_zmanim_response(id(zmanim_doc), body);
+                                        - lambda: |-
+                                            id(main_display).update();
                     else:
                         - logger.log:
                             format: "HTTP error: %d"

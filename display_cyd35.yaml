@@ -34,7 +34,7 @@ display:
         auto t = id(sntp_time).now();
         int mode = id(display_mode);
         if (mode == 0) {
-          render_shabbos(it, id(doc), id(alef), id(alef_mid), id(mdi), id(background),
+          render_shabbos(it, id(doc), id(alef), id(alef_mid), id(mdi), id(background), id(zmanim_doc),
               t.year, t.month, t.day_of_month,
               t.hour, t.minute, t.day_of_week, id(geoname_idx));
         } else if (mode == 1) {
