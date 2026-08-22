@@ -333,10 +333,10 @@ static void extract_display_data(
     if (!strcmp(cat, "dafyomi")) {
       if (!daily_study.empty()) daily_study += "\n";
       daily_study += JSON_GET(obj, ["title"]);
-    } else if (!strcmp(cat, "tehillim")) {
+    } else if (!strcmp(cat, "dailyPsalms")) {
       if (!daily_study.empty()) daily_study += "\n";
       daily_study += JSON_GET(obj, ["title"]);
-    } else if (!strcmp(cat, "rambam")) {
+    } else if (!strcmp(cat, "dailyRambam1") || !strcmp(cat, "dailyRambam3")) {
       if (!daily_study.empty()) daily_study += "\n";
       daily_study += JSON_GET(obj, ["title"]);
     }
@@ -408,10 +408,7 @@ static void extract_display_data(
   strip_newlines(parasha_hebrew);
   strip_newlines(parasha_torah);
   strip_newlines(parasha_haftarah);
-  strip_newlines(daily_study);
   strip_newlines(parasha_english);
-  strip_newlines(zmanim);
-  strip_newlines(upcoming);
   strip_newlines(melachot_status);
   strip_newlines(shofar_status);
 
