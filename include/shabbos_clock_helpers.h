@@ -121,8 +121,8 @@ static std::string fmt_time_from_api(const char *iso_dt) {
 
 // Build zmanim display string from API response
 static std::string build_zmanim_string(const JsonDocument &doc) {
-  const char *mg   = JSON_GET(doc, ["times"]["mincha_gedola"]);
-  const char *plag = JSON_GET(doc, ["times"]["plag_hamincha"]);
+  const char *mg   = JSON_GET(doc, ["times"]["minchaGedola"]);
+  const char *plag = JSON_GET(doc, ["times"]["plagHaMincha"]);
   const char *sun  = JSON_GET(doc, ["times"]["sunset"]);
   if (!mg || !plag) return "";
   std::string mincha_s = fmt_time_from_api(mg);
@@ -494,7 +494,6 @@ static void render_shabbos(
   it.print(x + 22, y, font_small, c_wht, pe.c_str()); y += 16;
   it.print(x + 22, y, font_small, c_wht, ph.c_str()); y += 16;
   it.print(x, y, font_small, c_wht, pt.c_str()); y += 14;
-  it.print(x, y, font_small, c_wht, paf.c_str()); y += 14;
 
   // ---- Bottom-Left: Day info (date + daily study) -------------------------
   x = mx; y = 149;
@@ -527,17 +526,27 @@ static void render_shabbos(
       pos = nl + 1;
     }
   }
+  if (!paf.empty()) {
+    std::string::size_type pos = 0;
+    while (true) {
+      auto nl = paf.find('\n', pos);
+      if (nl == paf.npos) {
+        it.print(x, y, font_small, c_dim, paf.substr(pos).c_str());
+        break;
+      }
+      it.print(x, y, font_small, c_dim, paf.substr(pos, nl - pos).c_str());
+      y += 16;
+      pos = nl + 1;
+    }
+  }
 
   // ---- Bottom-Right: Upcoming ---------------------------------------------
   x = 244; y = 149;
   it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
   if (!up.empty()) {
     std::string::size_type pos = 0;
-    bool first = true;
     while (true) {
       auto nl = up.find('\n', pos);
-      if (!first) y += 10;
-      first = false;
       if (nl == up.npos) {
         it.print(x, y, font_small, c_wht, up.substr(pos).c_str());
         break;
