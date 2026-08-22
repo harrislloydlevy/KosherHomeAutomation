@@ -296,7 +296,7 @@ static void extract_display_data(
     std::string plag_str = fmt_time_12h(iso_buf);
     snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", maariv_h, maariv_m);
     std::string maariv_str = fmt_time_12h(iso_buf);
-    zmanim = str_sprintf("Mincha: 12:30 PM | Plag: %s\nMaariv: %s",
+    zmanim = str_sprintf("Mincha: 12:30 PM\nPlag: %s\nMaariv: %s",
       plag_str.c_str(), maariv_str.c_str());
   }
 
