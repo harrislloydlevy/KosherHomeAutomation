@@ -113,6 +113,16 @@ static void strip_newlines(std::string &s) {
     s.replace(p, 1, " ");
 }
 
+// Check if a HebCal item's date matches today's date (yr/mo/dy)
+// Item date can be "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SS"
+static bool matches_today(const char *date_str, int yr, int mo, int dy) {
+  if (!date_str || !*date_str) return false;
+  int y = 0, m = 0, d = 0;
+  if (sscanf(date_str, "%d-%d-%d", &y, &m, &d) >= 3)
+    return y == yr && m == mo && d == dy;
+  return false;
+}
+
 static void extract_display_data(
     JsonDocument &doc,
     int yr, int mo, int dy, int hr, int mi, int dow, int geoname_idx,
@@ -151,10 +161,14 @@ static void extract_display_data(
     const char *cat = JSON_GET(obj, ["category"]);
 
     if (!strcmp(cat, "candles")) {
-      candles_dt = JSON_GET(obj, ["date"]);
-      candles_memo = JSON_GET(obj, ["memo"]);
+      if (matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) {
+        candles_dt = JSON_GET(obj, ["date"]);
+        candles_memo = JSON_GET(obj, ["memo"]);
+      }
     } else if (!strcmp(cat, "havdalah")) {
-      havdalah_dt = JSON_GET(obj, ["date"]);
+      if (matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) {
+        havdalah_dt = JSON_GET(obj, ["date"]);
+      }
     } else if (!strcmp(cat, "parashat")) {
       p_name    = JSON_GET(obj, ["title"]);
       p_hebrew  = JSON_GET(obj, ["hebrew"]);
@@ -190,8 +204,10 @@ static void extract_display_data(
       }
 
     } else if (!strcmp(cat, "omer")) {
-      if (!melachot_status.empty()) melachot_status += "\n";
-      melachot_status += JSON_GET(obj, ["title"]);
+      if (matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) {
+        if (!melachot_status.empty()) melachot_status += "\n";
+        melachot_status += JSON_GET(obj, ["title"]);
+      }
     } else if (!strcmp(cat, "hebdate")) {
       if (!found_today) {
         int y2, m2, d2;
@@ -256,9 +272,10 @@ static void extract_display_data(
   parasha_english = p_name;
   parasha_haftarah = p_haftarah;
 
-  // Daily study — show dafyomi, tehillim, rambam
+  // Daily study — dafyomi, tehillim, rambam for today only
   daily_study.clear();
   for (JsonObject obj : items) {
+    if (!matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) continue;
     const char *cat = JSON_GET(obj, ["category"]);
     if (!strcmp(cat, "dafyomi")) {
       if (!daily_study.empty()) daily_study += "\n";
@@ -287,6 +304,11 @@ static void extract_display_data(
     if (sun_m < 0) { sun_h--; sun_m += 60; }
   }
   if (sun_h >= 0) {
+    // Estimate chatzot (midday) = sunset - 6h (rough), Mincha Gedola = chatzot + 30m
+    int mincha_h = sun_h - 6, mincha_m = sun_m;
+    while (mincha_m < 0) { mincha_h--; mincha_m += 60; }
+    mincha_m += 30;
+    while (mincha_m >= 60) { mincha_h++; mincha_m -= 60; }
     // Plag HaMincha: 75 min before sunset
     int plag_h = sun_h, plag_m = sun_m - 75;
     while (plag_m < 0) { plag_h--; plag_m += 60; }
@@ -295,12 +317,14 @@ static void extract_display_data(
     while (maariv_m >= 60) { maariv_h++; maariv_m -= 60; }
     // Format using ISO-like timestamps for fmt_time_12h
     char iso_buf[32];
+    snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", mincha_h, mincha_m);
+    std::string mincha_str = fmt_time_12h(iso_buf);
     snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", plag_h, plag_m);
     std::string plag_str = fmt_time_12h(iso_buf);
     snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", maariv_h, maariv_m);
     std::string maariv_str = fmt_time_12h(iso_buf);
-    zmanim = str_sprintf("Mincha: 12:30 PM\nPlag: %s\nMaariv: %s",
-      plag_str.c_str(), maariv_str.c_str());
+    zmanim = str_sprintf("Mincha: %s\nPlag: %s\nMaariv: %s",
+      mincha_str.c_str(), plag_str.c_str(), maariv_str.c_str());
   }
 
   // Today notes (omer, selichot season, etc.)
