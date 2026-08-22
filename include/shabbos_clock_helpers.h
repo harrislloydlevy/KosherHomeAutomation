@@ -336,7 +336,7 @@ static void extract_display_data(
     } else if (!strcmp(cat, "dailyPsalms")) {
       if (!daily_study.empty()) daily_study += "\n";
       daily_study += JSON_GET(obj, ["title"]);
-    } else if (!strcmp(cat, "dailyRambam1") || !strcmp(cat, "dailyRambam3")) {
+    } else if (!strcmp(cat, "dailyRambam3")) {
       if (!daily_study.empty()) daily_study += "\n";
       daily_study += JSON_GET(obj, ["title"]);
     }
