@@ -35,6 +35,32 @@ globals:
     type: int
     initial_value: '0'
     restore_value: false
+  - id: display_mode
+    type: int
+    initial_value: '0'
+    restore_value: false
+  - id: geo_input
+    type: std::string
+    initial_value: '""'
+    restore_value: false
+
+qr_code:
+  - id: ap_qr
+    value: "http://192.168.4.1/"
+    ecc: LOW
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+
+text_sensor:
+  - platform: wifi_info
+    ssid:
+      name: "WiFi SSID"
+      id: wifi_ssid_sensor
 
 script:
   - id: get_jdate
@@ -42,7 +68,7 @@ script:
     then:
       - logger.log: "Fetching HebCal data"
       - http_request.get:
-            max_response_buffer_size: 24576
+            max_response_buffer_size: 32768
             url: !lambda |-
                 auto t = id(sntp_time).now();
                 return build_hebcal_url(id(geoname_id), t.year, t.month, t.day_of_month);
@@ -72,6 +98,17 @@ script:
           id(geoname_id) = search_id;
       - script.execute: get_jdate
 
+  - id: set_location_from_string
+    mode: restart
+    then:
+      - lambda: |-
+          int gid = atoi(id(geo_input).c_str());
+          if (gid > 0) {
+            id(geoname_id) = gid;
+            id(geo_input) = "";
+          }
+      - script.execute: get_jdate
+
 logger:
 
 ota:
@@ -85,6 +122,8 @@ wifi:
     ssid: "Shabbos Clock Setup"
 
 captive_portal:
+
+safe_mode:
 
 time:
   - platform: sntp
@@ -106,7 +145,7 @@ time:
 font:
   - file: "gfonts://Noto Sans Hebrew"
     id: alef
-    size: 12
+    size: 14
     glyphs:
       - " !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`{|}~"
       - "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -117,7 +156,7 @@ font:
 
   - file: "gfonts://Noto Sans Hebrew"
     id: alef_mid
-    size: 16
+    size: 20
     glyphs:
       - " !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`{|}~"
       - "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -128,7 +167,7 @@ font:
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: mdi
-    size: 16
+    size: 22
     glyphs:
       - "\U000F17D3" # candle
       - "\U000F059B" # sunset/havdalah
@@ -137,9 +176,13 @@ font:
       - "\U000F097A" # Magen David
       - "\U000F05E2" # menorah
       - "\U000F00EE" # calendar
+      - "\U000F023F" # qrcode
+      - "\U000F0341" # wifi
+      - "\U000F049A" # arrow-left
+      - "\U000F0231" # keypad
 
 image:
-  - file: background.png
+  - file: background.jpg
     id: background
     resize: 480x320
     type: RGB565

@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 #include <string>
 #include <vector>
 #include "esphome/core/helpers.h"
@@ -64,11 +65,11 @@ static std::string rtl(const std::string &s) {
   return result;
 }
 
-// URL builder — 45-day window with leyning
+// URL builder — 60-day window with leyning
 static std::string build_hebcal_url(int gid, int y, int m, int d) {
   int ey = y, em = m, ed = d;
   static const int dim[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-  for (int i = 0; i < 45; i++) {
+  for (int i = 0; i < 60; i++) {
     int lim = dim[em - 1];
     if (em == 2 && (ey % 4 == 0 && (ey % 100 != 0 || ey % 400 == 0))) lim = 29;
     if (++ed > lim) { ed = 1; if (++em > 12) { em = 1; ey++; } }
@@ -121,6 +122,7 @@ static void extract_display_data(
     std::string &parasha_torah,
     std::string &parasha_haftarah,
     std::string &daily_study,
+    std::string &parasha_english,
     std::string &zmanim,
     std::string &upcoming,
     std::string &melachot_status,
@@ -150,8 +152,8 @@ static void extract_display_data(
     } else if (!strcmp(cat, "parashat")) {
       p_name    = JSON_GET(obj, ["title"]);
       p_hebrew  = JSON_GET(obj, ["hebrew"]);
-      p_torah   = str_sprintf("Torah: %s", JSON_GET(obj, ["leyning"]["torah"]));
-      p_haftarah = str_sprintf("Haftarah: %s", JSON_GET(obj, ["leyning"]["haftarah"]));
+      p_torah   = JSON_GET(obj, ["leyning"]["torah"]);
+      p_haftarah = JSON_GET(obj, ["leyning"]["haftarah"]);
     } else if (!strcmp(cat, "holiday")) {
       if (JSON_GET(obj, ["yomtov"]) && *JSON_GET(obj, ["yomtov"])) {
         is_yomtov = true;
@@ -224,6 +226,16 @@ static void extract_display_data(
   size_t ofpos = heb_trimmed.find(" of ");
   if (ofpos != std::string::npos) heb_trimmed.replace(ofpos, 4, " ");
   hebrew_date = rtl(heb_today_hebrew);
+  // Sanitize geresh/gershayim to ASCII if font doesn't render them
+  auto replace_utf8 = [](std::string &s, const std::string &from, const std::string &to) {
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::string::npos) {
+      s.replace(pos, from.size(), to);
+      pos += to.size();
+    }
+  };
+  replace_utf8(hebrew_date, "\u05F3", "'");
+  replace_utf8(hebrew_date, "\u05F4", "\"");
   english_date = str_sprintf("%s, %d %s %d", dow_full(dow), dy, mon_full(mo), yr);
 
   // Parasha: strip "Parashat " prefix from Hebrew name, then RTL
@@ -232,29 +244,23 @@ static void extract_display_data(
     p_heb_display = p_heb_display.substr(8);  // "פרשת " (5+1 space)
   parasha_hebrew = rtl(p_heb_display);
   parasha_torah  = p_torah;
+  parasha_english = p_name;
   parasha_haftarah = p_haftarah;
 
-  // Daily study — look for dafyomi, tehillim, rambam
+  // Daily study — show dafyomi, tehillim, rambam
   daily_study.clear();
   for (JsonObject obj : items) {
     const char *cat = JSON_GET(obj, ["category"]);
     if (!strcmp(cat, "dafyomi")) {
-      daily_study = str_sprintf("Daf Yomi: %s", JSON_GET(obj, ["title"]));
-      break;
+      if (!daily_study.empty()) daily_study += "\n";
+      daily_study += str_sprintf("Daf Yomi: %s", JSON_GET(obj, ["title"]));
+    } else if (!strcmp(cat, "tehillim")) {
+      if (!daily_study.empty()) daily_study += "\n";
+      daily_study += str_sprintf("Tehillim: %s", JSON_GET(obj, ["title"]));
+    } else if (!strcmp(cat, "rambam")) {
+      if (!daily_study.empty()) daily_study += "\n";
+      daily_study += str_sprintf("Rambam: %s", JSON_GET(obj, ["title"]));
     }
-  }
-  if (daily_study.empty()) {
-    for (JsonObject obj : items) {
-      const char *cat = JSON_GET(obj, ["category"]);
-      if (!strcmp(cat, "tehillim")) {
-        daily_study = str_sprintf("Tehillim: %s", JSON_GET(obj, ["title"]));
-        break;
-      }
-    }
-  }
-  // Add Rambam reminder if we have dafyomi or tehillim
-  if (!daily_study.empty()) {
-    daily_study += "  |  Rambam: chabad.org/daily";
   }
 
   // Zmanim: estimate sunset from candle/havdalah, calculate Plag/Maariv/Mincha
@@ -284,7 +290,7 @@ static void extract_display_data(
     std::string plag_str = fmt_time_12h(iso_buf);
     snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", maariv_h, maariv_m);
     std::string maariv_str = fmt_time_12h(iso_buf);
-    zmanim = str_sprintf("Mincha: 12:30 PM | Plag: %s | Maariv: %s",
+    zmanim = str_sprintf("Mincha: 12:30 PM | Plag: %s\nMaariv: %s",
       plag_str.c_str(), maariv_str.c_str());
   }
 
@@ -324,12 +330,11 @@ static void render_shabbos(
     int yr, int mo, int dy, int hr, int mi, int dow,
     int geoname_idx) {
 
-  std::string hdr, ct, ci, ht, hi, hd, ed, ph, pt, paf, ds, zm, up, ms, ss, ft;
+  std::string hdr, ct, ci, ht, hi, hd, ed, ph, pe, pt, paf, ds, zm, up, ms, ss, ft;
   extract_display_data(doc, yr, mo, dy, hr, mi, dow, geoname_idx,
-      hdr, ct, ci, ht, hi, hd, ed, ph, pt, paf, ds, zm, up, ms, ss, ft);
+      hdr, ct, ci, ht, hi, hd, ed, ph, pe, pt, paf, ds, zm, up, ms, ss, ft);
 
-  auto c_bg    = Color(5, 5, 20);
-  auto c_panel = Color(10, 10, 30);
+  auto c_bg    = Color(0, 0, 0);
   auto c_gold  = Color(255, 200, 100);
   auto c_wht   = Color(255, 255, 255);
   auto c_dim   = Color(160, 160, 160);
@@ -340,48 +345,234 @@ static void render_shabbos(
   it.filled_rectangle(0, 0, 480, 28, c_bg);
   it.print(4, 6, font_small, c_wht, hdr.c_str());
 
-  it.filled_rectangle(4, 32, 234, 252, c_panel);
-  int ly = 36;
-  it.print(84, ly, font_icons, c_gold, ci.c_str());
-  it.print(104, ly, font_mid, c_gold, ct.c_str()); ly += 22;
-  it.print(84, ly, font_icons, c_gold, hi.c_str());
-  it.print(104, ly, font_mid, c_gold, ht.c_str()); ly += 24;
-  ly += 6;
-  it.filled_rectangle(8, ly, 226, 1, c_div); ly += 6;
-  it.print(10, ly, font_small, c_dim, "Today"); ly += 16;
-  it.print(10, ly, font_mid, c_wht, hd.c_str()); ly += 20;
-  it.print(10, ly, font_small, c_wht, ed.c_str()); ly += 20;
-  it.print(10, ly, font_small, c_gold, ms.c_str()); ly += 16;
-  if (!ss.empty()) { it.print(10, ly, font_small, c_gold, ss.c_str()); ly += 16; }
-  if (!zm.empty()) { it.print(10, ly, font_small, c_dim, zm.c_str()); ly += 12; }
-  if (!ds.empty()) { it.print(10, ly, font_small, c_dim, ds.c_str()); }
+  // Draw dividers between the 4 quadrants
+  it.filled_rectangle(0, 160, 480, 1, c_div);
+  it.filled_rectangle(240, 32, 1, 256, c_div);
 
-  it.filled_rectangle(242, 32, 234, 252, c_panel);
-  int ry = 36;
-  if (!ph.empty()) { it.print(248, ry, font_mid, c_wht, ph.c_str()); ry += 22; }
-  it.print(248, ry, font_icons, c_dim, "\U000F1CCC");
-  it.print(266, ry, font_small, c_wht, pt.c_str()); ry += 14;
-  it.print(248, ry, font_small, c_wht, paf.c_str()); ry += 18;
-  ry += 4;
-  it.filled_rectangle(246, ry, 226, 1, c_div); ry += 6;
-  if (!up.empty()) {
-    it.print(248, ry, font_small, c_dim, "Upcoming"); ry += 14;
-    // Display each holiday line
+  int mx = 8, my = 34;               // margin x/y from box edges
+  int col_w = 224, box_h = 120;      // usable width/height per box
+
+  // ---- Top-Left: Key times ------------------------------------------------
+  int x = mx, y = my;
+  it.filled_rectangle(x - 4, y - 4, col_w, box_h, c_bg);
+  it.print(x, y, font_small, c_dim, "Times"); y += 18;
+  if (ct != "--:--") {
+    it.print(x, y, font_icons, c_gold, ci.c_str());
+    it.print(x + 24, y, font_mid, c_gold, ct.c_str()); y += 22;
+  }
+  if (ht != "--:--") {
+    it.print(x, y, font_icons, c_gold, hi.c_str());
+    it.print(x + 24, y, font_mid, c_gold, ht.c_str()); y += 22;
+  }
+  it.print(x, y, font_small, c_wht, ms.c_str()); y += 16;
+  if (!ss.empty()) {
+    it.print(x, y, font_small, c_gold, ss.c_str()); y += 16;
+  }
+  if (!zm.empty()) {
     std::string::size_type pos = 0;
     while (true) {
-      auto nl = up.find('\n', pos);
-      if (nl == up.npos) {
-        it.print(248, ry, font_small, c_wht, up.substr(pos).c_str());
+      auto nl = zm.find('\n', pos);
+      if (nl == zm.npos) {
+        it.print(x, y, font_small, c_dim, zm.substr(pos).c_str());
         break;
       }
-      it.print(248, ry, font_small, c_wht, up.substr(pos, nl - pos).c_str());
-      ry += 14;
+      it.print(x, y, font_small, c_dim, zm.substr(pos, nl - pos).c_str());
+      y += 16;
       pos = nl + 1;
     }
   }
 
-  it.filled_rectangle(0, 287, 480, 1, c_div);
-  it.filled_rectangle(240, 32, 1, 252, c_div);
+  // ---- Top-Right: Parsha --------------------------------------------------
+  x = 244; y = my;
+  it.filled_rectangle(x - 4, y - 4, col_w, box_h, c_bg);
+  it.print(x, y, font_small, c_dim, "Parsha"); y += 18;
+  it.print(x, y, font_icons, c_dim, "\U000F1CCC");
+  it.print(x + 22, y, font_mid, c_wht, pe.c_str()); y += 20;
+  it.print(x + 22, y, font_mid, c_wht, ph.c_str()); y += 20;
+  it.print(x, y, font_small, c_wht, pt.c_str()); y += 14;
+  it.print(x, y, font_small, c_wht, paf.c_str()); y += 14;
+
+  // ---- Bottom-Left: Day info (date + daily study) -------------------------
+  x = mx; y = 164;
+  it.filled_rectangle(x - 4, y - 4, col_w, box_h, c_bg);
+  it.print(x, y, font_small, c_dim, "Today"); y += 18;
+  it.print(x, y, font_mid, c_wht, hd.c_str()); y += 20;
+  it.print(x, y, font_small, c_wht, ed.c_str()); y += 16;
+  if (!ds.empty()) {
+    std::string::size_type pos = 0;
+    while (true) {
+      auto nl = ds.find('\n', pos);
+      if (nl == ds.npos) {
+        it.print(x, y, font_small, c_dim, ds.substr(pos).c_str());
+        break;
+      }
+      it.print(x, y, font_small, c_dim, ds.substr(pos, nl - pos).c_str());
+      y += 16;
+      pos = nl + 1;
+    }
+  }
+
+  // ---- Bottom-Right: Upcoming ---------------------------------------------
+  x = 244; y = 164;
+  it.filled_rectangle(x - 4, y - 4, col_w, box_h, c_bg);
+  it.print(x, y, font_small, c_dim, "Upcoming"); y += 18;
+  if (!up.empty()) {
+    std::string::size_type pos = 0;
+    while (true) {
+      auto nl = up.find('\n', pos);
+      if (nl == up.npos) {
+        it.print(x, y, font_small, c_wht, up.substr(pos).c_str());
+        break;
+      }
+      it.print(x, y, font_small, c_wht, up.substr(pos, nl - pos).c_str());
+      y += 14;
+      pos = nl + 1;
+    }
+  }
+
   it.filled_rectangle(0, 288, 480, 32, c_bg);
   it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Left to set location, Swipe Right to setup Wifi");
 }
+
+// ============================================================
+// Location settings screen (swipe left)
+// ============================================================
+template<typename TDisplay, typename TFont, typename TIconFont, typename TImage>
+static void render_location_screen(
+    TDisplay &it,
+    TFont *font_small,
+    TFont *font_mid,
+    TIconFont *font_icons,
+    TImage *bg_img,
+    int geoname_id,
+    const std::string &input) {
+
+  auto c_bg    = Color(0, 0, 0);
+  auto c_gold  = Color(255, 200, 100);
+  auto c_wht   = Color(255, 255, 255);
+  auto c_dim   = Color(160, 160, 160);
+  auto c_btn   = Color(40, 40, 80);
+
+  if (bg_img) it.image(0, 0, bg_img);
+
+  // Header
+  it.filled_rectangle(0, 0, 480, 28, c_bg);
+  it.print(4, 6, font_small, c_wht, "Set Location");
+
+  // Current location info
+  it.print(10, 36, font_mid, c_gold, "Current GeoName ID:");
+  char id_buf[32];
+  snprintf(id_buf, sizeof(id_buf), "%d", geoname_id);
+  it.print(10, 60, font_mid, c_wht, id_buf);
+
+  // Input display
+  it.filled_rectangle(10, 90, 460, 36, c_btn);
+  std::string display_str = input.empty() ? "Enter ID..." : input;
+  it.print(16, 96, font_mid, c_wht, display_str.c_str());
+
+  it.print(10, 136, font_small, c_dim, "Lookup your city's GeoName ID at:");
+  it.print(10, 152, font_small, c_gold, "hebcal.com/geo");
+
+  // Numeric keypad - 3x4 grid
+  // Keys: 1-9, backspace, 0, submit
+  // Position: x from 20 to 460, y from 180 to 280
+  // Each key: 100x30, with 10px gaps
+  int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
+  const char *keys[] = {
+    "1", "2", "3",
+    "4", "5", "6",
+    "7", "8", "9",
+    "\U000F049A", "0", "\u2714"
+  };
+  for (int i = 0; i < 12; i++) {
+    int col = i % 3;
+    int row = i / 3;
+    int x = kx + col * (kw + gap);
+    int y = ky + row * (kh + gap);
+    // Draw key background
+    it.filled_rectangle(x, y, kw, kh, c_btn);
+    // Draw key border
+    it.rectangle(x, y, kw, kh, c_dim);
+    // Draw key label
+    int tx = x + kw / 2;
+    int ty = y + 4;
+    if (i == 9) {
+      // Backspace icon
+      it.print(tx - 16, ty + 2, font_mid, c_gold, "\U000F049A");
+    } else if (i == 11) {
+      // Submit checkmark
+      it.print(tx - 8, ty + 2, font_mid, c_gold, "\u2714");
+    } else {
+      it.print(tx - 6, ty + 2, font_mid, c_wht, keys[i]);
+    }
+  }
+
+  // Footer
+  it.filled_rectangle(0, 287, 480, 1, c_dim);
+  it.filled_rectangle(0, 288, 480, 32, c_bg);
+  it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Right to return");
+}
+
+// ============================================================
+// WiFi settings screen (swipe right)
+// ============================================================
+template<typename TDisplay, typename TFont, typename TIconFont, typename TImage, typename TQr>
+static void render_wifi_screen(
+    TDisplay &it,
+    TFont *font_small,
+    TFont *font_mid,
+    TIconFont *font_icons,
+    TImage *bg_img,
+    TQr *ap_qr,
+    bool wifi_connected,
+    const std::string &wifi_ssid,
+    float signal_dbm) {
+
+  auto c_bg    = Color(0, 0, 0);
+  auto c_gold  = Color(255, 200, 100);
+  auto c_wht   = Color(255, 255, 255);
+  auto c_dim   = Color(160, 160, 160);
+  auto c_btn   = Color(40, 40, 80);
+  auto c_red   = Color(200, 50, 50);
+
+  if (bg_img) it.image(0, 0, bg_img);
+
+  // Header
+  it.filled_rectangle(0, 0, 480, 28, c_bg);
+  it.print(4, 6, font_small, c_wht, "WiFi Settings");
+
+  // Connection status
+  it.print(10, 36, font_mid, wifi_connected ? c_gold : c_red,
+    wifi_connected ? "Connected" : "Not Connected");
+
+  if (wifi_connected) {
+    it.print(10, 60, font_small, c_wht, "SSID:");
+    if (!wifi_ssid.empty()) {
+      it.print(60, 60, font_small, c_wht, wifi_ssid.c_str());
+    }
+    char db_buf[32];
+    if (isnan(signal_dbm)) {
+      snprintf(db_buf, sizeof(db_buf), "Signal: -- dBm");
+    } else {
+      snprintf(db_buf, sizeof(db_buf), "Signal: %.0f dBm", signal_dbm);
+    }
+    it.print(10, 80, font_small, c_wht, db_buf);
+  } else {
+    it.print(10, 60, font_small, c_dim, "Connect via AP at 192.168.4.1");
+  }
+
+  // QR Code - connect to captive portal
+  it.print(240, 44, font_small, c_dim, TextAlign::CENTER, "Scan to connect");
+  it.qr_code(160, 60, ap_qr, c_wht, 3);
+
+  // Reset WiFi button
+  it.filled_rectangle(40, 190, 400, 40, c_red);
+  it.print(240, 200, font_mid, c_wht, TextAlign::CENTER, "RESET WiFi & Reconfigure");
+
+  // Footer
+  it.filled_rectangle(0, 287, 480, 1, c_dim);
+  it.filled_rectangle(0, 288, 480, 32, c_bg);
+  it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Left to return");
+}
+
+
