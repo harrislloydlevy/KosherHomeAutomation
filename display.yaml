@@ -8,7 +8,9 @@
 output:
   - id: display_backlight
     platform: ledc
-    pin: GPIO45  # LCD_BL (active high)
+    pin:
+      number: GPIO45  # LCD_BL (active high)
+      ignore_strapping_warning: true
 
 light:
   - id: display_backlight_light
@@ -33,8 +35,12 @@ display:
     platform: mipi_spi
     model: ILI9341
     spi_id: spi_bus
-    cs_pin: GPIO10   # LCD_CS
-    dc_pin: GPIO46   # LCD_DC
+    cs_pin:
+      number: GPIO10
+      #ignore_strapping_warning: true
+    dc_pin: # LCD_DC
+      number: GPIO46
+      ignore_strapping_warning: true
     # RST is tied to the EN (system reset) pin; no software reset available.
     invert_colors: false
     data_rate: 40MHz

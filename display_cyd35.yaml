@@ -31,9 +31,21 @@ display:
 
     lambda: |-
         auto t = id(sntp_time).now();
-        render_shabbos(it, id(doc), id(alef), id(alef_mid), id(mdi), id(background),
-            t.year, t.month, t.day_of_month,
-            t.hour, t.minute, t.day_of_week, id(geoname_idx));
+        int mode = id(display_mode);
+        if (mode == 0) {
+          render_shabbos(it, id(doc), id(alef), id(alef_mid), id(mdi), id(background),
+              t.year, t.month, t.day_of_month,
+              t.hour, t.minute, t.day_of_week, id(geoname_idx));
+        } else if (mode == 1) {
+          render_location_screen(it, id(alef), id(alef_mid), id(mdi), id(background),
+              id(geoname_id), id(geo_input));
+        } else if (mode == 2) {
+          bool wifi_ok = wifi::global_wifi_component ? wifi::global_wifi_component->is_connected() : false;
+          std::string ssid = wifi_ok ? id(wifi_ssid_sensor).get_state() : "";
+          float sig = id(wifi_signal_db).get_state();
+          render_wifi_screen(it, id(alef), id(alef_mid), id(mdi), id(background),
+              id(ap_qr), wifi_ok, ssid, sig);
+        }
 
 touchscreen:
   - id: main_touchscreen
@@ -52,4 +64,66 @@ touchscreen:
       mirror_x: true
     on_touch:
       - lambda: |-
-          static int idx = 0;
+          static int start_x = -1, start_y = -1;
+          int mode = id(display_mode);
+          if (touch.state) {
+            if (start_x < 0) {
+              start_x = touch.x;
+              start_y = touch.y;
+            }
+          } else if (start_x >= 0) {
+            int dx = touch.x - start_x;
+            int dy = touch.y - start_y;
+            int dist = abs(dx) + abs(dy);
+            if (dist > 50 && abs(dx) > abs(dy)) {
+              if (dx > 0) {
+                id(display_mode) = 2;
+              } else {
+                id(display_mode) = 1;
+              }
+            } else if (mode == 1) {
+              // Location keypad tap
+              int tx = start_x, ty = start_y;
+              int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
+              for (int i = 0; i < 12; i++) {
+                int col = i % 3;
+                int row = i / 3;
+                int x = kx + col * (kw + gap);
+                int y = ky + row * (kh + gap);
+                if (tx >= x && tx <= x + kw && ty >= y && ty <= y + kh) {
+                  if (i == 9) {
+                    if (!id(geo_input).empty()) id(geo_input).pop_back();
+                  } else if (i == 11) {
+                    if (!id(geo_input).empty()) {
+                      int gid = atoi(id(geo_input).c_str());
+                      if (gid > 0) {
+                        id(geoname_id) = gid;
+                        id(display_mode) = 0;
+                        id(get_jdate).execute();
+                      }
+                      id(geo_input) = "";
+                    }
+                  } else {
+                    const char *digits = "123456789";
+                    if (i < 9) {
+                      id(geo_input) += digits[i];
+                    } else {
+                      id(geo_input) += '0';
+                    }
+                  }
+                  id(main_display).update();
+                  break;
+                }
+              }
+            } else if (mode == 2) {
+              // WiFi screen tap - check reset button
+              int tx = start_x, ty = start_y;
+              if (tx >= 40 && tx <= 440 && ty >= 190 && ty <= 230) {
+                ESP_LOGI("wifi", "User triggered WiFi reset - rebooting to safe mode");
+                id(display_mode) = 0;
+                App.safe_reboot();
+              }
+            }
+            start_x = -1;
+            start_y = -1;
+          }

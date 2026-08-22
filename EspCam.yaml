@@ -1,0 +1,83 @@
+---
+substitutions:
+  name: standalone-shabbosclock
+  friendly_name: "Standalone Shabbos Clock"
+  api_key: !secret api_key
+  ota_password: !secret ota_password
+  ap_password: !secret ap_password
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+
+esphome:
+  name:  camera
+  friendly_name: camera
+
+esp32: 
+  board: esp32cam
+  framework:
+    type: arduino
+
+psram:
+  mode: quad
+  speed: 80MHz
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_key
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+# Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Esp32-Cam Fallback Hotspot"
+    password: "ShjJdFB3AESp"
+
+captive_portal:
+
+esp32_camera_web_server:
+  - port: 8080
+    mode: stream
+  - port: 8081
+    mode: snapshot
+    
+button:
+  - platform: restart
+    name: "Restart button" 
+    
+# ESP32-CAM
+esp32_camera:
+  name: Camera
+  external_clock:
+    pin: GPIO0
+    frequency: 20MHz
+  i2c_pins:
+    sda: GPIO26
+    scl: GPIO27
+  data_pins: [GPIO5, GPIO18, GPIO19, GPIO21, GPIO36, GPIO39, GPIO34, GPIO35]
+  vsync_pin: GPIO25
+  href_pin: GPIO23
+  pixel_clock_pin: GPIO22
+  power_down_pin: GPIO32
+#   resolution: 320x240 
+  jpeg_quality: 10
+  vertical_flip: False
+  horizontal_mirror: False
+  max_framerate: 5 fps
+  idle_framerate: 0 fps
+
+# Camera light
+output:
+  - platform: gpio
+    pin: GPIO4
+    id: gpio_4
+
+light:
+  - platform: binary
+    output: gpio_4
+    name: Camera light

@@ -23,15 +23,21 @@ esphome:
   friendly_name: ${friendly_name}
 
 esp32:
-  board: esp32dev
+  board: denky32
   framework:
     type: arduino
 
-# Enable logging
-logger:
-
 # Enable Home Assistant API
 api:
+
+# Example configuration entry
+debug:
+  update_interval: 5s
+
+# Logger must be at least debug (default)
+logger:
+  level: debug
+
 
 wifi:
   ssid: ${wifi_ssid}
@@ -48,6 +54,8 @@ captive_portal:
 color:
   - id: white
     hex: ffffff
+  - id: red
+    hex: FF0000
   - id: ha_blue
     hex: 18bcf2
   - id: ha_yellow
@@ -63,6 +71,7 @@ light:
     name: Display Backlight
     id: backlight
     restore_mode: ALWAYS_ON
+
 # Set up LED on the back and turn it off by default
   - platform: rgb
     name: RGB
@@ -82,6 +91,14 @@ light:
 # {{as_timestamp(states('sensor.jewish_calendar_upcoming_candle_lighting','status')) | timestamp_custom('%-I:%M %p') }}
 
 sensor:
+  - platform: dht
+    pin: GPIO22
+    temperature:
+      name: "Kitchen Temperature"
+    humidity:
+      name: "Kitchen Humidity"
+    update_interval: 60s
+
 # Set up sensor for LDR (light meter)
   - platform: adc
     pin: GPIO34
@@ -121,6 +138,12 @@ sensor:
 
 
 text_sensor:
+  - platform: debug
+    device:
+      name: "Device Info"
+    reset_reason:
+      name: "Reset Reason"
+
   - platform: homeassistant
     name: "Jewish Date"
     entity_id: sensor.jewish_calendar_date
@@ -221,47 +244,54 @@ display:
     # Screen is 320x240
     # Images are 33 high, and text is around 33 so we lay things out every 40 pixels down
     lambda: |-
-      it.fill(id(Color::BLACK));
+      auto red = Color(255, 0, 0);
+      auto blk = Color(0, 0, 0);
+      auto gry = Color(60, 60, 60);
 
-      it.printf(0, 0, id(mdi), "\U000F140b"); // Lightning bolt
-      it.printf(33, 6, id(alef), "%4.1fKw", (id(total_power).state / 1000));
+      it.image(0, 0, id(background));
+
+      it.printf(0, 0, id(mdi), blk, "\U000F140b"); // Lightning bolt
+      it.printf(33, 6, id(alef), blk, "%4.1fKw", (id(total_power).state / 1000));
       it.graph(120, 0, id(total_power_graph));
 
-      it.printf(0, 40, id(mdi), "\U000F1CCC"); // Book
-      it.printf(38, 44, id(alef), "%s", id(parsha).state.c_str());
+      it.printf(0, 40, id(mdi), blk, "\U000F1CCC"); // Book
+      it.printf(38, 44, id(alef), blk, "%s", id(parsha).state.c_str());
 
-      it.printf(0, 80, id(mdi), "\U000F05e2"); // Candle
-      it.printf(32, 84, id(alef), "%s", id(candle_lighting).state.c_str());
+      it.printf(0, 80, id(mdi), blk, "\U000F05e2"); // Candle
+      it.printf(32, 84, id(alef), blk, "%s", id(candle_lighting).state.c_str());
 
-      it.printf(160, 80, id(mdi), "\U000F059b"); // Sunset    
-      it.printf(192, 84, id(alef), "%s", id(havdallah).state.c_str());
+      it.printf(160, 80, id(mdi), blk, "\U000F059b"); // Sunset    
+      it.printf(192, 84, id(alef), blk, "%s", id(havdallah).state.c_str());
 
-      it.printf(0, 120, id(mdi), "\U000F00EE"); // Blank Calendar
-      it.printf(7, 128, id(mdi_small), "\U000F097A"); // Smaller Magen David in centre of calendar
-      it.printf(32, 122, id(alef), "%s", id(jdate).state.c_str());
+      it.printf(0, 120, id(mdi), blk, "\U000F00EE"); // Blank Calendar
+      it.printf(7, 128, id(mdi_small), blk, "\U000F097A"); // Smaller Magen David in centre of calendar
+      it.printf(32, 122, id(alef), blk, "%s", id(jdate).state.c_str());
 
-      auto red = Color(255, 0, 0);
-      it.filled_rectangle(8, 160, 80, 40);
+      it.filled_rectangle(8, 160, 80, 40, gry);
 
-binary_sensor:
+#binary_sensor:
   # Paging Button to Call Children
-  - platform: touchscreen
-    name: "CallChildren"
-    id: call_children
-    x_min: 0
-    x_max: 80
-    y_min: 160
-    y_max: 200
+  #- platform: touchscreen
+  #  name: "CallChildren"
+  #  id: call_children
+  #  x_min: 0
+  #  x_max: 80
+  #  y_min: 160
+  #  y_max: 200
 
 graph:
   # Show bare-minimum auto-ranged graph
   - id: total_power_graph
-    sensor: total_power
     duration: 1h
     width: 200
     height: 36
     x_grid: 10min
     border: true
+    traces:
+      - sensor: total_power
+        line_type: SOLID
+        continuous: true
+        color: red
 
 # Set up the xpt2046 touch platform
 touchscreen:
@@ -304,8 +334,17 @@ font:
       - "\U000F097A" # Magen David
       - "\U000F1CCC" # Book
       - "\U000F00EE" # Empty Calendar
+      - "\U000F0241" # Flash Symbol
+
+  # Need a smaller version to fit inside the calendar
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: mdi_small
     size: 18
     glyphs:
       - "\U000F097A" # Magen David
+
+image:
+  - file: background.png
+    id: background
+    resize: 320x240
+    type: RGB565

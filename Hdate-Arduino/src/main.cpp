@@ -39,7 +39,7 @@ char dispBuf[DISP_HEIGHT][DISP_WIDTH + 1];
 // We hold a hallachic time as both the time and it's id.
 struct h_time
 {
-  char id[3]; // 3 Charachter ID for the time
+  char id[4]; // 3 Charachter ID for the time, plus a null term
   int time;   // The time of the time in minutes from midnight.
 };
 
@@ -62,6 +62,7 @@ enum timeId
   Shk,
   BHs,
   TzH,
+  asfasF,
   NumTimeIds
 };
 
@@ -89,23 +90,32 @@ int hdate_get_next_shabbos(hdate_struct *h, hdate_struct *next_h);
 
 void setup()
 {
+  // Must be 9600 for Wokwi simulator
   Serial.begin(115200);
+  Serial.println("Begin!");
 
   // Yes I could use X() macros instead. But it's a short list and
   // I'm pretty sure I'll make it more dynamic later.
-  memcpy(times[AHa].id, "AHa", 3);
-  memcpy(times[Msh].id, "Msh", 3);
-  memcpy(times[HHa].id, "HHa", 3);
-  memcpy(times[LSh].id, "LSh", 3);
-  memcpy(times[LTf].id, "LTf", 3);
-  memcpy(times[CHt].id, "CHt", 3);
-  memcpy(times[MGd].id, "MGd", 3);
-  memcpy(times[MKt].id, "MKt", 3);
-  memcpy(times[PlM].id, "PlM", 3);
-  memcpy(times[CnL].id, "CnL", 3);
-  memcpy(times[Shk].id, "Shk", 3);
-  memcpy(times[BHs].id, "BHs", 3);
-  memcpy(times[TzH].id, "TzH", 3);
+  times[0].id[0] = 'A';
+  times[0].id[1] = 'H';
+  times[0].id[2] = 'a';
+  times[0].id[3] = 0;
+
+  Serial.println(times[0].id);
+
+  strncpy(times[timeId::AHa].id, "AHa", 4);
+  strncpy(times[Msh].id, "Msh", 4);
+  strncpy(times[HHa].id, "HHa", 4);
+  strncpy(times[LSh].id, "LSh", 4);
+  strncpy(times[LTf].id, "LTf", 4);
+  strncpy(times[CHt].id, "CHt", 4);
+  strncpy(times[MGd].id, "MGd", 4);
+  strncpy(times[MKt].id, "MKt", 4);
+  strncpy(times[PlM].id, "PlM", 4);
+  strncpy(times[CnL].id, "CnL", 4);
+  strncpy(times[Shk].id, "Shk", 4);
+  strncpy(times[BHs].id, "BHs", 4);
+  strncpy(times[TzH].id, "TzH", 4);
 }
 
 void loop()
@@ -114,6 +124,8 @@ void loop()
   hdate_set_gdate(&h, DAY, MONTH, YEAR);
   int curTime = TIME;
   int chatzot = 0;
+
+  Serial.println("Start Loop");
 
   char *date;
   /*
@@ -131,9 +143,11 @@ void loop()
   parsha = hdate_get_next_shabbos(&h, &next_shabbos);
   holyday = hdate_get_next_holyday(&h, &next_holyday);
 
-  // We always use memcpy here as we don't want to whack in trailing zeros
+  // We always use strcpy here as we don't want to whack in trailing zeros
   // when we're laying out the text.
   snprintf(dispBuf[0], DISP_WIDTH + 1, "%s|%s", date, hdate_get_parasha_string(parsha, true));
+
+  Serial.println(dispBuf[0]);
 
   date = hdate_get_format_date(&next_holyday, dateBuf, DATE_BUF_LEN, DIASPORA, false);
 
@@ -143,6 +157,7 @@ void loop()
       "%s|%s",
       hdate_get_holyday_string(holyday, true),
       date);
+  Serial.println(dispBuf[1]);
 
   /*
    * The bottom two lines show the next 6 upcoming hallachic times as shown
@@ -173,6 +188,8 @@ void loop()
       &sunset,
       &first_stars,
       &three_stars);
+
+  Serial.println("Got times");
 
   /* The Hallachic Times are as below - Second columm is the
    *   variable we get from the hdate library they correspond to

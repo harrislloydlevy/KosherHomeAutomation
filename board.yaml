@@ -57,6 +57,7 @@ binary_sensor:
     name: Boot Button
     pin:
       number: GPIO0
+      ignore_strapping_warning: true
       inverted: true
       mode:
         input: true

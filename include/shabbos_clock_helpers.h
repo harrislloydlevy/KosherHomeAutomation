@@ -107,6 +107,12 @@ static const char *GEONAME_CITIES[] = {"Sydney","New York","Jerusalem","London",
 static const int GEONAME_COUNT = 5;
 
 // Extract all display data from the JsonDocument
+// Strip embedded newlines from HebCal strings (they trigger font warnings)
+static void strip_newlines(std::string &s) {
+  for (size_t p = s.find('\n'); p != std::string::npos; p = s.find('\n', p))
+    s.replace(p, 1, " ");
+}
+
 static void extract_display_data(
     JsonDocument &doc,
     int yr, int mo, int dy, int hr, int mi, int dow, int geoname_idx,
@@ -253,13 +259,13 @@ static void extract_display_data(
     const char *cat = JSON_GET(obj, ["category"]);
     if (!strcmp(cat, "dafyomi")) {
       if (!daily_study.empty()) daily_study += "\n";
-      daily_study += str_sprintf("Daf Yomi: %s", JSON_GET(obj, ["title"]));
+      daily_study += JSON_GET(obj, ["title"]);
     } else if (!strcmp(cat, "tehillim")) {
       if (!daily_study.empty()) daily_study += "\n";
-      daily_study += str_sprintf("Tehillim: %s", JSON_GET(obj, ["title"]));
+      daily_study += JSON_GET(obj, ["title"]);
     } else if (!strcmp(cat, "rambam")) {
       if (!daily_study.empty()) daily_study += "\n";
-      daily_study += str_sprintf("Rambam: %s", JSON_GET(obj, ["title"]));
+      daily_study += JSON_GET(obj, ["title"]);
     }
   }
 
@@ -314,6 +320,21 @@ static void extract_display_data(
   else
     shofar_status = "";
 
+  // Sanitize all display strings — strip embedded newlines to avoid font warnings
+  strip_newlines(candles_time);
+  strip_newlines(havdalah_time);
+  strip_newlines(hebrew_date);
+  strip_newlines(english_date);
+  strip_newlines(parasha_hebrew);
+  strip_newlines(parasha_torah);
+  strip_newlines(parasha_haftarah);
+  strip_newlines(daily_study);
+  strip_newlines(parasha_english);
+  strip_newlines(zmanim);
+  strip_newlines(upcoming);
+  strip_newlines(melachot_status);
+  strip_newlines(shofar_status);
+
   // Footer
   footer = str_sprintf("%s | %s", heb_mon, GEONAME_CITIES[geoname_idx]);
 }
@@ -346,16 +367,16 @@ static void render_shabbos(
   it.print(4, 6, font_small, c_wht, hdr.c_str());
 
   // Draw dividers between the 4 quadrants
-  it.filled_rectangle(0, 160, 480, 1, c_div);
-  it.filled_rectangle(240, 32, 1, 256, c_div);
+  it.filled_rectangle(0, 145, 480, 1, c_div);
+  it.filled_rectangle(190, 32, 1, 256, c_div);
 
   int mx = 8, my = 34;               // margin x/y from box edges
-  int col_w = 224, box_h = 120;      // usable width/height per box
+  int col_w_l = 182, col_w_r = 286;  // left/right column widths
+  int box_h_t = 111, box_h_b = 138;  // top/bottom box heights
 
   // ---- Top-Left: Key times ------------------------------------------------
   int x = mx, y = my;
-  it.filled_rectangle(x - 4, y - 4, col_w, box_h, c_bg);
-  it.print(x, y, font_small, c_dim, "Times"); y += 18;
+  it.filled_rectangle(x - 4, y - 4, col_w_l, box_h_t, c_bg);
   if (ct != "--:--") {
     it.print(x, y, font_icons, c_gold, ci.c_str());
     it.print(x + 24, y, font_mid, c_gold, ct.c_str()); y += 22;
@@ -364,7 +385,6 @@ static void render_shabbos(
     it.print(x, y, font_icons, c_gold, hi.c_str());
     it.print(x + 24, y, font_mid, c_gold, ht.c_str()); y += 22;
   }
-  it.print(x, y, font_small, c_wht, ms.c_str()); y += 16;
   if (!ss.empty()) {
     it.print(x, y, font_small, c_gold, ss.c_str()); y += 16;
   }
@@ -383,19 +403,17 @@ static void render_shabbos(
   }
 
   // ---- Top-Right: Parsha --------------------------------------------------
-  x = 244; y = my;
-  it.filled_rectangle(x - 4, y - 4, col_w, box_h, c_bg);
-  it.print(x, y, font_small, c_dim, "Parsha"); y += 18;
+  x = 194; y = my;
+  it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_t, c_bg);
   it.print(x, y, font_icons, c_dim, "\U000F1CCC");
-  it.print(x + 22, y, font_mid, c_wht, pe.c_str()); y += 20;
-  it.print(x + 22, y, font_mid, c_wht, ph.c_str()); y += 20;
+  it.print(x + 22, y, font_small, c_wht, pe.c_str()); y += 16;
+  it.print(x + 22, y, font_small, c_wht, ph.c_str()); y += 16;
   it.print(x, y, font_small, c_wht, pt.c_str()); y += 14;
   it.print(x, y, font_small, c_wht, paf.c_str()); y += 14;
 
   // ---- Bottom-Left: Day info (date + daily study) -------------------------
-  x = mx; y = 164;
-  it.filled_rectangle(x - 4, y - 4, col_w, box_h, c_bg);
-  it.print(x, y, font_small, c_dim, "Today"); y += 18;
+  x = mx; y = 149;
+  it.filled_rectangle(x - 4, y - 4, col_w_l, box_h_b, c_bg);
   it.print(x, y, font_mid, c_wht, hd.c_str()); y += 20;
   it.print(x, y, font_small, c_wht, ed.c_str()); y += 16;
   if (!ds.empty()) {
@@ -413,9 +431,8 @@ static void render_shabbos(
   }
 
   // ---- Bottom-Right: Upcoming ---------------------------------------------
-  x = 244; y = 164;
-  it.filled_rectangle(x - 4, y - 4, col_w, box_h, c_bg);
-  it.print(x, y, font_small, c_dim, "Upcoming"); y += 18;
+  x = 194; y = 149;
+  it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_b, c_bg);
   if (!up.empty()) {
     std::string::size_type pos = 0;
     while (true) {

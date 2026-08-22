@@ -1,0 +1,75 @@
+---
+substitutions:
+  api_key: !secret api_key
+  ota_password: !secret ota_password
+  ap_password: !secret ap_password
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+
+esphome:
+  name: esp32-s3-zero-ble-proxy
+  friendly_name: BLE Proxy S3 Zero
+  platformio_options:
+    board_build.f_flash: 40000000L
+    board_build.flash_mode: dio
+    board_build.flash_size: 4MB
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  framework:
+    type: esp-idf
+    version: recommended
+    # below is for Bluetooth proxy, may not be needed
+    sdkconfig_options:
+      CONFIG_BT_BLE_42_FEATURES_SUPPORTED: y
+      CONFIG_BT_BLE_50_FEATURES_SUPPORTED: n
+
+# Configures the active BLE Proxy component
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 110ms
+    window: 110ms
+    active: true
+
+bluetooth_proxy:
+  active: true
+
+# Add this temporary diagnostic tool to your YAML
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP Address"
+
+# Enable Home Assistant API & OTA updates
+api:
+ encryption:
+   key: ${api_key}
+
+ota:
+  - platform: esphome
+    password: ${ota_password}
+
+# Enable logging over the native USB CDC port
+logger:
+  hardware_uart: USB_CDC
+  level: DEBUG
+
+# Basic Wi-Fi setup (Replace with your network details)
+wifi:
+  # Enable fallback hotspot if Wi-Fi fails
+  ap:
+    ssid: "BLE-Proxy-Fallback"
+    password: "FallbackPassword"
+
+captive_portal:
+
+
+# Light component to utilize the onboard WS2812 RGB LED on GPIO21
+light:
+  - platform: esp32_rmt_led_strip
+    rgb_order: GRB
+    pin: GPIO21
+    num_leds: 1
+    chipset: ws2812
+    name: "Board LED"

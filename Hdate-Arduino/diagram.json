@@ -7,10 +7,5 @@
     ],
     "connections": [
     ],
-    "dependencies": {},
-    "serialMonitor": {
-     "display": "auto",
-      "newline": "lf",
-      "convertEol": false
-    }
+    "serialMonitor": { "display": "plotter", "newline": "lf" }
   }

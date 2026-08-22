@@ -21,9 +21,6 @@ static void draw_weight_chart(lv_obj_t *parent) {
     lv_chart_set_point_count(weight_chart, 20);
     lv_obj_set_style_line_color(weight_chart, lv_color_hex(0x4B5563), LV_PART_ITEMS);
     weight_series = lv_chart_add_series(weight_chart, lv_color_hex(0x10B981), LV_CHART_AXIS_PRIMARY_Y);
-    
-    // Add Y axis labels
-    lv_chart_set_axis_ticks(weight_chart, LV_CHART_AXIS_PRIMARY_Y, 10, 5, 5, 2, true, 40);
   }
 }
 

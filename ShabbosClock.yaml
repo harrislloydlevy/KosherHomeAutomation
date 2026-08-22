@@ -14,6 +14,10 @@ substitutions:
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
 
+
+packages:
+  board: !include ./board.yaml
+
 # ============================================================ 
 # ESPHome YAML start
 #

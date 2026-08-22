@@ -1,6 +1,6 @@
 ---
 substitutions:
-  name: bedsid
+  name: bedside
   friendly_name: "Bedside Display"
   api_key: !secret api_key
   ota_password: !secret ota_password
@@ -17,20 +17,35 @@ esphome:
   on_boot:
     - priority: -100
       then:
-        - logger.log: "Booted Screen"
-  platformio_options:
-    build_flags:
-      - -D LV_USE_CHART=1
-  includes:
-    - chart_helpers.h
+
+http_request:
+
+online_image:
+  - url: http://192.168.0.140:10000/harris-test/0?viewport=320x105&lang=en-GB
+    id: weight_chart_pic
+    format: png
+    type: RGB565
+    update_interval: 10min
+    on_download_finished:
+      - logger.log: "Download concluded waiting LVGL display." # Only for test if donwload is running.
+      - lvgl.image.update:
+          id: weight_chart_obj
+          src: weight_chart_pic
+
+image:
+  - id: placeholder_pic
+    file: "download"
+    type: RGB565
+
+ota:
+  - platform: esphome
+    password: ${ota_password}
 
 text_sensor:
   - platform: homeassistant
     name: "Stream of Weight Measurements"
     entity_id: sensor.weight_lts_history_string
     id: weight_stream
-    on_value:
-      - script.execute: redraw_weight_graph
           
   - platform: homeassistant
     name: "Stream of Fat Pct Measurements"
@@ -75,24 +90,26 @@ binary_sensor:
             checked: !lambda "return x;"
 
 logger:
+              #  level: VERBOSE
+              #  logs:
+              #    esp32_ble_tracker: VERBOSE
+              #    homeassistant.components.bluetooth: VERBOSE
 
 wifi:
   ssid: ${wifi_ssid}
   password: ${wifi_password}
+  on_connect:
+    - component.update: weight_chart_pic
 
 esp32_ble_tracker:
   scan_parameters:
     interval: 1100ms
     window: 1100ms
 
+      # D4:43:8A:DC:50:10 - Bluetooth MAC of scale
+
 bluetooth_proxy:
   active: true
-
-script:
-  - id: redraw_weight_graph
-    then:
-      - lambda: |-
-          update_weight_chart(id(weight_stream).state);
 
 lvgl:
   displays: [main_display]
@@ -361,8 +378,9 @@ lvgl:
                               data:
                                 entity_id: "light.ensuite_light, light.ensuite_fan, switch.ensuite_heater"
 
-        - obj:
-            id: graph_area
+        - image:
+            id: weight_chart_obj
+            src: placeholder_pic
             x: 5
             y: 130
             width: 310
@@ -372,14 +390,6 @@ lvgl:
             border_color: 0x4B5563
             radius: 8
             pad_all: 0
-            widgets:
-              - obj:
-                  id: weight_chart_container
-                  width: 310
-                  height: 105
-                  on_create:
-                    lambda: |-
-                      draw_weight_chart(obj);
 
 api:
  encryption:
