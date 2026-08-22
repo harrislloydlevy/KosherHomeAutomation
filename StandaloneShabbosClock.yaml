@@ -84,26 +84,32 @@ script:
                         - lambda: |-
                             ESP_LOGI("http_body", "Content Length: %d", response->content_length);
                             parse_hebcal_response(id(doc), body);
-                        - http_request.get:
-                              max_response_buffer_size: 4096
-                              url: !lambda |-
-                                  auto t = id(sntp_time).now();
-                                  return build_zmanim_url(id(geoname_id), t.year, t.month, t.day_of_month);
-                              capture_response: true
-                              on_response:
-                                then:
-                                  - if:
-                                      condition:
-                                          lambda: return response->status_code == 200;
-                                      then:
-                                        - lambda: |-
-                                            parse_zmanim_response(id(zmanim_doc), body);
-                                        - lambda: |-
-                                            id(main_display).update();
+                        - script.execute: get_zmanim
                     else:
                         - logger.log:
                             format: "HTTP error: %d"
                             args: ['response->status_code']
+
+  - id: get_zmanim
+    mode: restart
+    then:
+      - logger.log: "Fetching zmanim data"
+      - http_request.get:
+            max_response_buffer_size: 4096
+            url: !lambda |-
+                auto t = id(sntp_time).now();
+                return build_zmanim_url(id(geoname_id), t.year, t.month, t.day_of_month);
+            capture_response: true
+            on_response:
+              then:
+                - if:
+                    condition:
+                        lambda: return response->status_code == 200;
+                    then:
+                      - lambda: |-
+                          parse_zmanim_response(id(zmanim_doc), body);
+                      - lambda: |-
+                          id(main_display).update();
 
   - id: set_location
     mode: restart
