@@ -371,10 +371,12 @@ static void render_shabbos(
 
   // Draw dividers between the 4 quadrants
   it.filled_rectangle(0, 145, 480, 1, c_div);
-  it.filled_rectangle(190, 32, 1, 256, c_div);
+  it.filled_rectangle(190, 32, 1, 113, c_div);   // top vertical
+  it.filled_rectangle(240, 145, 1, 142, c_div);  // bottom vertical
 
   int mx = 8, my = 34;               // margin x/y from box edges
-  int col_w_l = 182, col_w_r = 286;  // left/right column widths
+  int col_w_l = 182, col_w_r = 286;  // top left/right column widths
+  int col_w_b = 232;                 // bottom column width (equal)
   int box_h_t = 111, box_h_b = 138;  // top/bottom box heights
 
   // ---- Top-Left: Key times ------------------------------------------------
@@ -415,7 +417,7 @@ static void render_shabbos(
 
   // ---- Bottom-Left: Day info (date + daily study) -------------------------
   x = mx; y = 149;
-  it.filled_rectangle(x - 4, y - 4, col_w_l, box_h_b, c_bg);
+  it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
   it.print(x, y, font_mid, c_wht, hd.c_str()); y += 20;
   it.print(x, y, font_small, c_wht, ed.c_str()); y += 16;
   if (!ds.empty()) {
@@ -446,8 +448,8 @@ static void render_shabbos(
   }
 
   // ---- Bottom-Right: Upcoming ---------------------------------------------
-  x = 194; y = 149;
-  it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_b, c_bg);
+  x = 244; y = 149;
+  it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
   if (!up.empty()) {
     std::string::size_type pos = 0;
     bool first = true;
