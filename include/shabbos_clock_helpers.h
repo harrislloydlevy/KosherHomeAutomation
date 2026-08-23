@@ -116,10 +116,13 @@ static bool parse_zmanim_response(JsonDocument &doc, const std::string &body) {
 static std::string fmt_time_from_api(const char *iso_dt) {
   if (!iso_dt || !*iso_dt) return "--:--";
   int h = 0, m = 0;
-  char buf[64];
   if (sscanf(iso_dt, "%*[^T]T%d:%d", &h, &m) >= 2) {
-    snprintf(buf, sizeof(buf), "T%02d:%02d:00", h, m);
-    return fmt_time_12h(buf);
+    const char *ampm = (h >= 12) ? "PM" : "AM";
+    int h12 = h % 12;
+    if (h12 == 0) h12 = 12;
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d:%02d %s", h12, m, ampm);
+    return std::string(buf);
   }
   return "--:--";
 }
@@ -454,9 +457,12 @@ static void render_shabbos(
       hdr, ct, ci, ht, hi, hd, ed, ph, pe, pt, paf, ds, zm, up, ms, ss, ft);
   // Override zmanim with API data if available
   std::string api_zm = build_zmanim_string(zmanim_json);
-  ESP_LOGI("zmanim", "api_zm='%s' (len=%d) zm='%s' (len=%d)",
-    api_zm.c_str(), (int)api_zm.size(), zm.c_str(), (int)zm.size());
-  if (!api_zm.empty()) zm = api_zm;
+  if (!api_zm.empty()) {
+    ESP_LOGI("zmanim", "Using API zmanim: '%s'", api_zm.c_str());
+    zm = api_zm;
+  } else {
+    ESP_LOGW("zmanim", "API zmanim empty, fallback to calculated");
+  }
 
   auto c_bg    = Color(0, 0, 0);
   auto c_gold  = Color(255, 200, 100);
