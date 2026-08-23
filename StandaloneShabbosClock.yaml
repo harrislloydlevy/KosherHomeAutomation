@@ -208,7 +208,8 @@ font:
       - "\U000F0231" # keypad
 
 image:
-  - file: background.jpg
+  - platform: file
+    file: background.jpg
     id: background
     resize: 480x320
     type: RGB565
