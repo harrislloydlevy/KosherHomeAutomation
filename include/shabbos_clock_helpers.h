@@ -487,19 +487,16 @@ static void render_shabbos(
     it.print(x, y, font_small, c_gold, ss.c_str()); y += 16;
   }
   if (!zm.empty()) {
-    bool hide_maariv = (ct != "--:--" || ht != "--:--");
     std::string::size_type pos = 0;
     while (true) {
       auto nl = zm.find('\n', pos);
       if (nl == zm.npos) {
-        if (!hide_maariv) it.print(x, y, font_small, c_dim, zm.substr(pos).c_str());
+        it.print(x, y, font_small, c_dim, zm.substr(pos).c_str());
         break;
       }
       it.print(x, y, font_small, c_dim, zm.substr(pos, nl - pos).c_str());
       y += 16;
       pos = nl + 1;
-      auto nnl = zm.find('\n', pos);
-      if (hide_maariv && nnl == std::string::npos) break;
     }
   }
   // ---- Top-Right: Parsha (name + readings) --------------------------------
