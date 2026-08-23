@@ -472,7 +472,7 @@ static void render_shabbos(
   int col_w_b = 232;                 // bottom column width (equal)
   int box_h_t = 111, box_h_b = 138;  // top/bottom box heights
 
-  // ---- Top-Left: Times + parsha English name ------------------------------
+  // ---- Top-Left: Times ----------------------------------------------------
   int x = mx, y = my;
   it.filled_rectangle(x - 4, y - 4, col_w_l, box_h_t, c_bg);
   if (ct != "--:--") {
