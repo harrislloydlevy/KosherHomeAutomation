@@ -256,34 +256,40 @@ static void extract_display_data(
       if (!upcoming.empty()) upcoming += "\n";
       {
         const char *hd = JSON_GET(obj, ["hdate"]);
-        const char *hb = JSON_GET(obj, ["hebrew"]);
+        const char *hb_raw = JSON_GET(obj, ["hebrew"]);
         std::string hd_short(hd);
         size_t sp = hd_short.rfind(' ');
         if (sp != std::string::npos) hd_short.resize(sp);
+        std::string hb(hb_raw);
+        sp = hb.rfind(' ');
+        if (sp != std::string::npos) hb.resize(sp);
         const char *gd = JSON_GET(obj, ["date"]);
         int gy = 0, gm = 0, gd_n = 0;
         char gb[16] = "";
         if (sscanf(gd, "%d-%d-%d", &gy, &gm, &gd_n) >= 3)
           snprintf(gb, sizeof(gb), "%d %s", gd_n, mon_short(gm));
         upcoming += str_sprintf("%s|%s|%s|%s",
-          JSON_GET(obj, ["title"]), hd_short.c_str(), hb, gb);
+          JSON_GET(obj, ["title"]), hd_short.c_str(), hb.c_str(), gb);
       }
 
     } else if (!strcmp(cat, "roshchodesh")) {
       if (!upcoming.empty()) upcoming += "\n";
       {
         const char *hd = JSON_GET(obj, ["hdate"]);
-        const char *hb = JSON_GET(obj, ["hebrew"]);
+        const char *hb_raw = JSON_GET(obj, ["hebrew"]);
         std::string hd_short(hd);
         size_t sp = hd_short.rfind(' ');
         if (sp != std::string::npos) hd_short.resize(sp);
+        std::string hb(hb_raw);
+        sp = hb.rfind(' ');
+        if (sp != std::string::npos) hb.resize(sp);
         const char *gd = JSON_GET(obj, ["date"]);
         int gy = 0, gm = 0, gd_n = 0;
         char gb[16] = "";
         if (sscanf(gd, "%d-%d-%d", &gy, &gm, &gd_n) >= 3)
           snprintf(gb, sizeof(gb), "%d %s", gd_n, mon_short(gm));
         upcoming += str_sprintf("%s|%s|%s|%s",
-          JSON_GET(obj, ["title"]), hd_short.c_str(), hb, gb);
+          JSON_GET(obj, ["title"]), hd_short.c_str(), hb.c_str(), gb);
       }
 
     } else if (!strcmp(cat, "omer")) {
