@@ -119,12 +119,18 @@ static std::string fmt_time_from_api(const char *iso_dt) {
   return "--:--";
 }
 
+static std::string truncate_at_comma(const std::string &s) {
+  size_t pos = s.find(',');
+  if (pos != std::string::npos) return s.substr(0, pos);
+  return s;
+}
+
 // Build zmanim display string from API response
 static std::string build_zmanim_string(const JsonDocument &doc) {
   const char *mg   = JSON_GET(doc, ["times"]["minchaGedola"]);
   const char *plag = JSON_GET(doc, ["times"]["plagHaMincha"]);
   const char *sun  = JSON_GET(doc, ["times"]["sunset"]);
-  if (!mg || !plag) return "";
+  if (!mg || !*mg || !plag || !*plag) return "";
   std::string mincha_s = fmt_time_from_api(mg);
   std::string plag_s   = fmt_time_from_api(plag);
   std::string maariv_s = sun ? fmt_time_from_api(sun) : "--:--";
@@ -338,7 +344,7 @@ static void extract_display_data(
       daily_study += JSON_GET(obj, ["title"]);
     } else if (!strcmp(cat, "dailyRambam3")) {
       if (!daily_study.empty()) daily_study += "\n";
-      daily_study += JSON_GET(obj, ["title"]);
+      daily_study += truncate_at_comma(JSON_GET(obj, ["title"]));
     }
   }
 
@@ -445,7 +451,7 @@ static void render_shabbos(
   if (bg_img) it.image(0, 0, bg_img);
 
   it.filled_rectangle(0, 0, 480, 28, c_bg);
-  it.print(4, 6, font_small, c_wht, hdr.c_str());
+  it.print(240, 6, font_small, c_wht, TextAlign::CENTER, hdr.c_str());
 
   // Draw dividers between the 4 quadrants
   it.filled_rectangle(0, 145, 480, 1, c_div);
@@ -457,7 +463,7 @@ static void render_shabbos(
   int col_w_b = 232;                 // bottom column width (equal)
   int box_h_t = 111, box_h_b = 138;  // top/bottom box heights
 
-  // ---- Top-Left: Key times ------------------------------------------------
+  // ---- Top-Left: Times + parsha English name ------------------------------
   int x = mx, y = my;
   it.filled_rectangle(x - 4, y - 4, col_w_l, box_h_t, c_bg);
   if (ct != "--:--") {
@@ -483,33 +489,24 @@ static void render_shabbos(
       pos = nl + 1;
     }
   }
+  if (!ds.empty()) {
+    y += 4;
+    it.print(x, y, font_small, c_gold, ds.c_str()); y += 14;
+  }
 
   // ---- Top-Right: Parsha --------------------------------------------------
   x = 194; y = my;
   it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_t, c_bg);
   it.print(x, y, font_icons, c_dim, "\U000F1CCC");
   it.print(x + 22, y, font_small, c_wht, pe.c_str()); y += 16;
-  it.print(x + 22, y, font_small, c_wht, ph.c_str()); y += 16;
+  it.print(x + col_w_r - 4, y, font_small, c_wht, TextAlign::RIGHT, ph.c_str()); y += 16;
   it.print(x, y, font_small, c_wht, pt.c_str()); y += 14;
 
   // ---- Bottom-Left: Day info (date + daily study) -------------------------
   x = mx; y = 149;
   it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
-  it.print(x, y, font_mid, c_wht, hd.c_str()); y += 20;
+  it.print(x + col_w_b - 4, y, font_mid, c_wht, TextAlign::RIGHT, hd.c_str()); y += 20;
   it.print(x, y, font_small, c_wht, ed.c_str()); y += 16;
-  if (!ds.empty()) {
-    std::string::size_type pos = 0;
-    while (true) {
-      auto nl = ds.find('\n', pos);
-      if (nl == ds.npos) {
-        it.print(x, y, font_small, c_dim, ds.substr(pos).c_str());
-        break;
-      }
-      it.print(x, y, font_small, c_dim, ds.substr(pos, nl - pos).c_str());
-      y += 16;
-      pos = nl + 1;
-    }
-  }
   if (!ms.empty()) {
     std::string::size_type pos = 0;
     while (true) {
@@ -544,11 +541,17 @@ static void render_shabbos(
     std::string::size_type pos = 0;
     while (true) {
       auto nl = up.find('\n', pos);
-      if (nl == up.npos) {
-        it.print(x, y, font_small, c_wht, up.substr(pos).c_str());
-        break;
+      std::string line = (nl == up.npos) ? up.substr(pos) : up.substr(pos, nl - pos);
+      if (line.length() > 26) {
+        size_t brk = line.rfind(' ', 26);
+        if (brk == std::string::npos) brk = 26;
+        it.print(x, y, font_small, c_wht, line.substr(0, brk).c_str());
+        y += 14;
+        it.print(x + 12, y, font_small, c_wht, line.substr(brk + 1).c_str());
+      } else {
+        it.print(x, y, font_small, c_wht, line.c_str());
       }
-      it.print(x, y, font_small, c_wht, up.substr(pos, nl - pos).c_str());
+      if (nl == up.npos) break;
       y += 14;
       pos = nl + 1;
     }
