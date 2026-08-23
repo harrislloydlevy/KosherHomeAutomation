@@ -486,16 +486,19 @@ static void render_shabbos(
     it.print(x, y, font_small, c_gold, ss.c_str()); y += 16;
   }
   if (!zm.empty()) {
+    bool hide_maariv = (ct != "--:--" || ht != "--:--");
     std::string::size_type pos = 0;
     while (true) {
       auto nl = zm.find('\n', pos);
       if (nl == zm.npos) {
-        it.print(x, y, font_small, c_dim, zm.substr(pos).c_str());
+        if (!hide_maariv) it.print(x, y, font_small, c_dim, zm.substr(pos).c_str());
         break;
       }
       it.print(x, y, font_small, c_dim, zm.substr(pos, nl - pos).c_str());
       y += 16;
       pos = nl + 1;
+      auto nnl = zm.find('\n', pos);
+      if (hide_maariv && nnl == std::string::npos) break;
     }
   }
   // Parsha info after times
@@ -563,10 +566,10 @@ static void render_shabbos(
       std::string date_line = hd_s;
       if (!greg_s.empty()) date_line += "  " + greg_s;
       if (!date_line.empty()) { it.print(x, y, font_small, c_dim, date_line.c_str()); y += 14; }
-      // Line 2: English name
-      if (!title.empty()) { it.print(x, y, font_small, c_wht, title.c_str()); y += 14; }
-      // Line 3: Hebrew name indented 2 chars
-      if (!heb.empty()) { it.print(x + 16, y, font_small, c_wht, heb.c_str()); y += 14; }
+      // Line 2: English name + reversed Hebrew name on same line
+      std::string name_line = title;
+      if (!heb.empty()) name_line += "  " + rtl(heb);
+      if (!name_line.empty()) { it.print(x, y, font_small, c_wht, name_line.c_str()); y += 14; }
       // 6pt gap before next event
       y += 6;
       if (nl == up.npos) break;
