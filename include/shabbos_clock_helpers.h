@@ -489,11 +489,6 @@ static void render_shabbos(
       pos = nl + 1;
     }
   }
-  if (!ds.empty()) {
-    y += 4;
-    it.print(x, y, font_small, c_gold, ds.c_str()); y += 14;
-  }
-
   // ---- Top-Right: Parsha --------------------------------------------------
   x = 194; y = my;
   it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_t, c_bg);
@@ -537,6 +532,9 @@ static void render_shabbos(
   // ---- Bottom-Right: Upcoming ---------------------------------------------
   x = 244; y = 149;
   it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
+  if (!ds.empty()) {
+    it.print(x, y, font_small, c_gold, ds.c_str()); y += 16;
+  }
   if (!up.empty()) {
     std::string::size_type pos = 0;
     while (true) {
