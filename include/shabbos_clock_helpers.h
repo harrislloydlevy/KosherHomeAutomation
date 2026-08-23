@@ -489,13 +489,18 @@ static void render_shabbos(
       pos = nl + 1;
     }
   }
-  // ---- Top-Right: Parsha --------------------------------------------------
+  // Parsha info after times
+  if (!ds.empty() || !ph.empty() || !pe.empty()) {
+    y += 2;
+    if (!ds.empty()) { it.print(x, y, font_small, c_gold, ds.c_str()); y += 14; }
+    if (!ph.empty()) { it.print(x + col_w_l - 4, y, font_small, c_wht, TextAlign::RIGHT, ph.c_str()); y += 14; }
+    if (!pe.empty()) { it.print(x, y, font_small, c_wht, pe.c_str()); y += 14; }
+    if (!pt.empty()) { it.print(x, y, font_small, c_wht, pt.c_str()); y += 14; }
+  }
+
+  // ---- Top-Right ----------------------------------------------------------
   x = 194; y = my;
   it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_t, c_bg);
-  it.print(x, y, font_icons, c_dim, "\U000F1CCC");
-  it.print(x + 22, y, font_small, c_wht, pe.c_str()); y += 16;
-  it.print(x + col_w_r - 4, y, font_small, c_wht, TextAlign::RIGHT, ph.c_str()); y += 16;
-  it.print(x, y, font_small, c_wht, pt.c_str()); y += 14;
 
   // ---- Bottom-Left: Day info (date + daily study) -------------------------
   x = mx; y = 149;
@@ -532,9 +537,6 @@ static void render_shabbos(
   // ---- Bottom-Right: Upcoming ---------------------------------------------
   x = 244; y = 149;
   it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
-  if (!ds.empty()) {
-    it.print(x, y, font_small, c_gold, ds.c_str()); y += 16;
-  }
   if (!up.empty()) {
     std::string::size_type pos = 0;
     while (true) {
