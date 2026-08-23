@@ -67,6 +67,7 @@ touchscreen:
       - lambda: |-
           static int start_x = -1, start_y = -1;
           int mode = id(display_mode);
+          ESP_LOGD("touch", "state=%d x=%d y=%d start=(%d,%d)", touch.state, touch.x, touch.y, start_x, start_y);
           if (touch.state) {
             if (start_x < 0) {
               start_x = touch.x;
@@ -76,11 +77,16 @@ touchscreen:
             int dx = touch.x - start_x;
             int dy = touch.y - start_y;
             int dist = abs(dx) + abs(dy);
+            ESP_LOGD("touch", "release dx=%d dy=%d dist=%d mode=%d", dx, dy, dist, mode);
             if (dist > 50 && abs(dx) > abs(dy)) {
               if (dx > 0) {
+                ESP_LOGI("touch", "Swipe right -> WiFi mode");
                 id(display_mode) = 2;
+                id(main_display).update();
               } else {
+                ESP_LOGI("touch", "Swipe left -> Location mode");
                 id(display_mode) = 1;
+                id(main_display).update();
               }
             } else if (mode == 1) {
               // Location keypad tap
