@@ -148,9 +148,12 @@ static std::string build_zmanim_string(const JsonDocument &doc) {
     if (sscanf(sun, "%*[^T]T%d:%d", &h, &m) >= 2) {
       m += 50;
       if (m >= 60) { h++; m -= 60; }
-      char buf[32];
-      snprintf(buf, sizeof(buf), "T%02d:%02d:00", h, m);
-      maariv_s = fmt_time_12h(buf);
+      const char *ampm = (h >= 12) ? "PM" : "AM";
+      int h12 = h % 12;
+      if (h12 == 0) h12 = 12;
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%d:%02d %s", h12, m, ampm);
+      maariv_s = std::string(buf);
     }
   }
   return str_sprintf("Mincha: %s\nPlag: %s\nMaariv: %s",

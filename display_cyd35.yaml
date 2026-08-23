@@ -78,8 +78,9 @@ touchscreen:
             int dy = touch.y - start_y;
             int dist = abs(dx) + abs(dy);
             ESP_LOGD("touch", "release dx=%d dy=%d dist=%d mode=%d", dx, dy, dist, mode);
-            if (dist > 50 && abs(dx) > abs(dy)) {
-              if (dx > 0) {
+            // swap_xy is on: physical horizontal → touch Y, physical vertical → touch X
+            if (dist > 50 && abs(dy) > abs(dx)) {
+              if (dy > 0) {
                 ESP_LOGI("touch", "Swipe right -> WiFi mode");
                 id(display_mode) = 2;
                 id(main_display).update();
