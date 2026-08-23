@@ -105,6 +105,11 @@ static bool parse_zmanim_response(JsonDocument &doc, const std::string &body) {
     return false;
   }
   ESP_LOGI("zmanim", "Parsed %d bytes OK", (int)body.length());
+  const char *mg = JSON_GET(doc, ["times"]["minchaGedola"]);
+  const char *plag = JSON_GET(doc, ["times"]["plagHaMincha"]);
+  const char *sun = JSON_GET(doc, ["times"]["sunset"]);
+  ESP_LOGI("zmanim", "minchaGedola='%s' plagHaMincha='%s' sunset='%s'",
+    mg ? mg : "(null)", plag ? plag : "(null)", sun ? sun : "(null)");
   return true;
 }
 
@@ -449,6 +454,8 @@ static void render_shabbos(
       hdr, ct, ci, ht, hi, hd, ed, ph, pe, pt, paf, ds, zm, up, ms, ss, ft);
   // Override zmanim with API data if available
   std::string api_zm = build_zmanim_string(zmanim_json);
+  ESP_LOGI("zmanim", "api_zm='%s' (len=%d) zm='%s' (len=%d)",
+    api_zm.c_str(), (int)api_zm.size(), zm.c_str(), (int)zm.size());
   if (!api_zm.empty()) zm = api_zm;
 
   auto c_bg    = Color(0, 0, 0);
