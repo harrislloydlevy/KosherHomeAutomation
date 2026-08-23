@@ -242,12 +242,16 @@ static void extract_display_data(
       {
         const char *hd = JSON_GET(obj, ["hdate"]);
         const char *hb = JSON_GET(obj, ["hebrew"]);
-        // Strip year from hdate (last 5 chars " 5787")
         std::string hd_short(hd);
         size_t sp = hd_short.rfind(' ');
         if (sp != std::string::npos) hd_short.resize(sp);
-        upcoming += str_sprintf("%s  %s  %s",
-          JSON_GET(obj, ["title"]), hd_short.c_str(), hb);
+        const char *gd = JSON_GET(obj, ["date"]);
+        int gy = 0, gm = 0, gd_n = 0;
+        char gb[16] = "";
+        if (sscanf(gd, "%d-%d-%d", &gy, &gm, &gd_n) >= 3)
+          snprintf(gb, sizeof(gb), "%d %s", gd_n, mon_short(gm));
+        upcoming += str_sprintf("%s|%s|%s|%s",
+          JSON_GET(obj, ["title"]), hd_short.c_str(), hb, gb);
       }
 
     } else if (!strcmp(cat, "roshchodesh")) {
@@ -258,8 +262,13 @@ static void extract_display_data(
         std::string hd_short(hd);
         size_t sp = hd_short.rfind(' ');
         if (sp != std::string::npos) hd_short.resize(sp);
-        upcoming += str_sprintf("%s  %s  %s",
-          JSON_GET(obj, ["title"]), hd_short.c_str(), hb);
+        const char *gd = JSON_GET(obj, ["date"]);
+        int gy = 0, gm = 0, gd_n = 0;
+        char gb[16] = "";
+        if (sscanf(gd, "%d-%d-%d", &gy, &gm, &gd_n) >= 3)
+          snprintf(gb, sizeof(gb), "%d %s", gd_n, mon_short(gm));
+        upcoming += str_sprintf("%s|%s|%s|%s",
+          JSON_GET(obj, ["title"]), hd_short.c_str(), hb, gb);
       }
 
     } else if (!strcmp(cat, "omer")) {
@@ -541,18 +550,26 @@ static void render_shabbos(
     std::string::size_type pos = 0;
     while (true) {
       auto nl = up.find('\n', pos);
-      std::string line = (nl == up.npos) ? up.substr(pos) : up.substr(pos, nl - pos);
-      if (line.length() > 26) {
-        size_t brk = line.rfind(' ', 26);
-        if (brk == std::string::npos) brk = 26;
-        it.print(x, y, font_small, c_wht, line.substr(0, brk).c_str());
-        y += 14;
-        it.print(x + 12, y, font_small, c_wht, line.substr(brk + 1).c_str());
-      } else {
-        it.print(x, y, font_small, c_wht, line.c_str());
-      }
+      std::string evt = (nl == up.npos) ? up.substr(pos) : up.substr(pos, nl - pos);
+      // Fields: title|hd_short|hebrew|greg_date
+      size_t p1 = evt.find('|');
+      size_t p2 = p1 != std::string::npos ? evt.find('|', p1 + 1) : std::string::npos;
+      size_t p3 = p2 != std::string::npos ? evt.find('|', p2 + 1) : std::string::npos;
+      std::string title   = (p1 != std::string::npos) ? evt.substr(0, p1) : evt;
+      std::string hd_s    = (p2 != std::string::npos) ? evt.substr(p1 + 1, p2 - p1 - 1) : "";
+      std::string heb     = (p3 != std::string::npos) ? evt.substr(p2 + 1, p3 - p2 - 1) : "";
+      std::string greg_s  = (p3 != std::string::npos) ? evt.substr(p3 + 1) : "";
+      // Line 1: Hebrew date in English + Gregorian date
+      std::string date_line = hd_s;
+      if (!greg_s.empty()) date_line += "  " + greg_s;
+      if (!date_line.empty()) { it.print(x, y, font_small, c_dim, date_line.c_str()); y += 14; }
+      // Line 2: English name
+      if (!title.empty()) { it.print(x, y, font_small, c_wht, title.c_str()); y += 14; }
+      // Line 3: Hebrew name indented 2 chars
+      if (!heb.empty()) { it.print(x + 16, y, font_small, c_wht, heb.c_str()); y += 14; }
+      // 6pt gap before next event
+      y += 6;
       if (nl == up.npos) break;
-      y += 14;
       pos = nl + 1;
     }
   }
