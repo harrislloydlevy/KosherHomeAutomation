@@ -478,7 +478,8 @@ static void render_shabbos(
   if (ct != "--:--") {
     it.print(x, y, font_icons, c_gold, ci.c_str());
     it.print(x + 24, y, font_mid, c_gold, ct.c_str()); y += 22;
-  } else if (ht != "--:--") {
+  }
+  if (ht != "--:--") {
     it.print(x, y, font_icons, c_gold, hi.c_str());
     it.print(x + 24, y, font_mid, c_gold, ht.c_str()); y += 22;
   }
