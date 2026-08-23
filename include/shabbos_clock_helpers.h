@@ -219,6 +219,7 @@ static void extract_display_data(
   std::string p_name, p_hebrew, p_torah, p_haftarah;
   std::string heb_today_hebrew;
   bool found_today = false;
+  bool found_parsha = false;
 
   bool is_yomtov = false, is_shabbat = false;
   const char *yt_name = "";
@@ -237,10 +238,13 @@ static void extract_display_data(
         havdalah_dt = JSON_GET(obj, ["date"]);
       }
     } else if (!strcmp(cat, "parashat")) {
-      p_name    = JSON_GET(obj, ["title"]);
-      p_hebrew  = JSON_GET(obj, ["hebrew"]);
-      p_torah   = JSON_GET(obj, ["leyning"]["torah"]);
-      p_haftarah = JSON_GET(obj, ["leyning"]["haftarah"]);
+      if (!found_parsha) {
+        p_name    = JSON_GET(obj, ["title"]);
+        p_hebrew  = JSON_GET(obj, ["hebrew"]);
+        p_torah   = JSON_GET(obj, ["leyning"]["torah"]);
+        p_haftarah = JSON_GET(obj, ["leyning"]["haftarah"]);
+        found_parsha = true;
+      }
     } else if (!strcmp(cat, "holiday")) {
       if (JSON_GET(obj, ["yomtov"]) && *JSON_GET(obj, ["yomtov"])) {
         is_yomtov = true;
