@@ -501,18 +501,19 @@ static void render_shabbos(
       if (hide_maariv && nnl == std::string::npos) break;
     }
   }
-  // Parsha info after times
-  if (!ds.empty() || !ph.empty() || !pe.empty()) {
+  // Parsha names after times
+  if (!ds.empty() || !ph.empty()) {
     y += 2;
     if (!ds.empty()) { it.print(x, y, font_small, c_gold, ds.c_str()); y += 14; }
     if (!ph.empty()) { it.print(x + col_w_l - 4, y, font_small, c_wht, TextAlign::RIGHT, ph.c_str()); y += 14; }
-    if (!pe.empty()) { it.print(x, y, font_small, c_wht, pe.c_str()); y += 14; }
-    if (!pt.empty()) { it.print(x, y, font_small, c_wht, pt.c_str()); y += 14; }
   }
 
-  // ---- Top-Right ----------------------------------------------------------
+  // ---- Top-Right: Torah and Haftarah readings -----------------------------
   x = 194; y = my;
   it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_t, c_bg);
+  it.print(x, y, font_icons, c_dim, "\U000F1CCC");
+  if (!pe.empty()) { it.print(x + 22, y, font_small, c_wht, pe.c_str()); y += 16; }
+  if (!pt.empty()) { it.print(x, y, font_small, c_wht, pt.c_str()); y += 14; }
 
   // ---- Bottom-Left: Day info (date + daily study) -------------------------
   x = mx; y = 149;
