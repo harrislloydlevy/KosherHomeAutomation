@@ -309,6 +309,10 @@ static void extract_display_data(
         p_torah   = JSON_GET(obj, ["leyning"]["torah"]);
         p_haftarah = JSON_GET(obj, ["leyning"]["haftarah"]);
         found_parsha = true;
+        ESP_LOGI("parsha", "Captured first parsha: %s (date=%s)",
+          p_name.c_str(), JSON_GET(obj, ["date"]));
+      } else {
+        ESP_LOGD("parsha", "Skipping subsequent parsha: %s", JSON_GET(obj, ["title"]));
       }
 
     // Holiday — add to upcoming events list
