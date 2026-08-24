@@ -556,13 +556,13 @@ static void render_shabbos(
   it.filled_rectangle(240, 145, 1, 142, c_div);            // bottom vertical (at x=240)
 
   int mx = 8, my = 34;               // content margin from box edges
-  int col_w_l = 182, col_w_r = 286;  // top left/right box widths
-  int col_w_b = 232;                 // bottom box width (equal for both)
+  int col_w_l = 186, col_w_r = 290;  // top left/right box widths (edge to edge)
+  int col_w_b = 240;                 // bottom box width (edge to divider to edge)
   int box_h_t = 111, box_h_b = 138;  // top/bottom box heights
 
   // ---- Top-Left: Times (candle, havdalah, shofar, mincha/plag/maariv) ----
   int x = mx, y = my;
-  it.filled_rectangle(x - 4, y - 4, col_w_l, box_h_t, c_bg);
+  it.filled_rectangle(0, y - 4, col_w_l, box_h_t, c_bg);
   // Candle lighting (shown only when valid for today)
   if (candles_time != "--:--") {
     it.print(x, y, font_icons, c_gold, candles_icon.c_str());
@@ -607,7 +607,7 @@ static void render_shabbos(
 
   // ---- Bottom-Left: Today (Hebrew date, English date, notes, daily study) ----
   x = mx; y = 149;
-  it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
+  it.filled_rectangle(0, y - 4, col_w_b, box_h_b, c_bg);
   // Hebrew date (right-aligned — Hebrew reads R-to-L)
   it.print(x + col_w_b - 4, y, font_mid, c_wht, TextAlign::RIGHT, hebrew_date.c_str()); y += 20;
   // English date
