@@ -24,11 +24,81 @@ packages:
 
 http_request:
 
+# ============================================================================
+# Globals
+# ============================================================================
+# Raw JSON documents from the API (kept for reference, not used during render)
 globals:
   - id: doc
     type: JsonDocument
   - id: zmanim_doc
     type: JsonDocument
+
+  # data_ready: false at boot, set true after first successful fetch.
+  # Display shows "Loading..." until true. Stays true forever after;
+  # refetches silently update the g_ globals without flicker.
+  - id: data_ready
+    type: bool
+    initial_value: 'false'
+    restore_value: false
+
+  # Pre-computed display strings — populated by extract_display_data()
+  # after each fetch, read by render_shabbos() during display update.
+  # This separation ensures render doesn't parse JSON (which would add
+  # ~500ms to each frame).
+  - id: g_hdr
+    type: std::string
+    initial_value: '""'
+  - id: g_candles_time
+    type: std::string
+    initial_value: '""'
+  - id: g_candles_icon
+    type: std::string
+    initial_value: '""'
+  - id: g_havdalah_time
+    type: std::string
+    initial_value: '""'
+  - id: g_havdalah_icon
+    type: std::string
+    initial_value: '""'
+  - id: g_hebrew_date
+    type: std::string
+    initial_value: '""'
+  - id: g_english_date
+    type: std::string
+    initial_value: '""'
+  - id: g_parasha_hebrew
+    type: std::string
+    initial_value: '""'
+  - id: g_parasha_torah
+    type: std::string
+    initial_value: '""'
+  - id: g_parasha_haftarah
+    type: std::string
+    initial_value: '""'
+  - id: g_daily_study
+    type: std::string
+    initial_value: '""'
+  - id: g_parasha_english
+    type: std::string
+    initial_value: '""'
+  - id: g_zmanim
+    type: std::string
+    initial_value: '""'
+  - id: g_upcoming
+    type: std::string
+    initial_value: '""'
+  - id: g_today_notes
+    type: std::string
+    initial_value: '""'
+  - id: g_shofar_status
+    type: std::string
+    initial_value: '""'
+  - id: g_footer
+    type: std::string
+    initial_value: '""'
+
+  # User settings
   - id: geoname_id
     type: int
     initial_value: '2147714'
@@ -64,7 +134,12 @@ text_sensor:
       name: "WiFi SSID"
       id: wifi_ssid_sensor
 
+# ============================================================================
+# Scripts
+# ============================================================================
 script:
+  # get_jdate: Fetches HebCal data, parses it, pre-computes display strings,
+  # then triggers zmanim fetch. Display update happens after zmanim completes.
   - id: get_jdate
     mode: restart
     then:
@@ -82,14 +157,29 @@ script:
                         lambda: return response->status_code == 200;
                     then:
                         - lambda: |-
-                            ESP_LOGI("http_body", "Content Length: %d", response->content_length);
                             parse_hebcal_response(id(doc), body);
+                            // Pre-compute all display data NOW so render
+                            // doesn't need to parse JSON on every frame
+                            auto t = id(sntp_time).now();
+                            extract_display_data(id(doc), id(zmanim_doc),
+                                t.year, t.month, t.day_of_month,
+                                t.hour, t.minute, t.day_of_week, id(geoname_idx),
+                                id(g_hdr), id(g_candles_time), id(g_candles_icon),
+                                id(g_havdalah_time), id(g_havdalah_icon),
+                                id(g_hebrew_date), id(g_english_date),
+                                id(g_parasha_hebrew), id(g_parasha_torah),
+                                id(g_parasha_haftarah), id(g_daily_study),
+                                id(g_parasha_english), id(g_zmanim),
+                                id(g_upcoming), id(g_today_notes),
+                                id(g_shofar_status), id(g_footer));
                         - script.execute: get_zmanim
                     else:
                         - logger.log:
                             format: "HTTP error: %d"
                             args: ['response->status_code']
 
+  # get_zmanim: Fetches zmanim API data, re-computes display data (to merge
+  # zmanim into g_zmanim), sets data_ready, and triggers display update.
   - id: get_zmanim
     mode: restart
     then:
@@ -108,6 +198,21 @@ script:
                     then:
                       - lambda: |-
                           parse_zmanim_response(id(zmanim_doc), body);
+                          // Re-run extract_display_data to merge zmanim
+                          // into the pre-computed globals
+                          auto t = id(sntp_time).now();
+                          extract_display_data(id(doc), id(zmanim_doc),
+                              t.year, t.month, t.day_of_month,
+                              t.hour, t.minute, t.day_of_week, id(geoname_idx),
+                              id(g_hdr), id(g_candles_time), id(g_candles_icon),
+                              id(g_havdalah_time), id(g_havdalah_icon),
+                              id(g_hebrew_date), id(g_english_date),
+                              id(g_parasha_hebrew), id(g_parasha_torah),
+                              id(g_parasha_haftarah), id(g_daily_study),
+                              id(g_parasha_english), id(g_zmanim),
+                              id(g_upcoming), id(g_today_notes),
+                              id(g_shofar_status), id(g_footer));
+                          id(data_ready) = true;
                       - lambda: |-
                           id(main_display).update();
 
@@ -147,6 +252,11 @@ captive_portal:
 
 safe_mode:
 
+# ============================================================================
+# Time: SNTP only — no on_time triggers.
+# Data refetching is handled by the interval component below, which is
+# decoupled from the time component so NTP sync doesn't cause screen redraws.
+# ============================================================================
 time:
   - platform: sntp
     timezone: "Australia/Sydney"
@@ -155,14 +265,20 @@ time:
      - 0.pool.ntp.org
      - 1.pool.ntp.org
      - 2.pool.ntp.org
-    on_time:
-      - seconds: 0
-        minutes: /30
-        then:
-          - script.execute: get_jdate
     on_time_sync:
       then:
         - script.execute: get_jdate
+
+# ============================================================================
+# Periodic data refresh: every 2 hours.
+# This replaces the old on_time trigger on the time component.
+# The interval fires regardless of NTP sync status, and the fetch scripts
+# silently update the g_ globals without flickering the display.
+# ============================================================================
+interval:
+  - interval: 2h
+    then:
+      - script.execute: get_jdate
 
 font:
   - file: "gfonts://Noto Sans Hebrew"

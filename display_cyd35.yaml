@@ -7,6 +7,13 @@ switch:
     entity_category: config
     restore_mode: ALWAYS_ON
 
+# ============================================================================
+# Display: Sunton ESP32-3248S035R ("Yellow CYD" 3.5", 320x480 ST7796)
+# ============================================================================
+# NO update_interval — the display only redraws when explicitly triggered
+# via id(main_display).update(). This prevents the ~30s screen blank/reload
+# that was happening with auto-refresh. Updates are triggered after data
+# fetches complete and on touch events.
 display:
   - id: main_display
     platform: mipi_spi
@@ -20,7 +27,6 @@ display:
       ignore_strapping_warning: true
     data_rate: 40MHz
     auto_clear_enabled: false
-    update_interval: 30s
     rotation: 90
     transform:
       mirror_y: true
@@ -31,12 +37,29 @@ display:
       height: 480
 
     lambda: |-
-        auto t = id(sntp_time).now();
+        // If data hasn't been fetched yet, show a loading screen.
+        // After first successful fetch, data_ready stays true forever
+        // and refetches silently update the globals without flicker.
+        if (!id(data_ready)) {
+          it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
+          it.print(240, 160, id(alef), Color(255, 255, 255), TextAlign::CENTER, "Loading...");
+          return;
+        }
+
         int mode = id(display_mode);
         if (mode == 0) {
-          render_shabbos(it, id(doc), id(alef), id(alef_mid), id(mdi), id(background), id(zmanim_doc),
-              t.year, t.month, t.day_of_month,
-              t.hour, t.minute, t.day_of_week, id(geoname_idx));
+          // Main Shabbos clock — draws from pre-computed g_ globals.
+          // No JSON parsing happens during render; all data was extracted
+          // by extract_display_data() after the last fetch.
+          render_shabbos(it, id(alef), id(alef_mid), id(mdi), id(background),
+              id(g_hdr),
+              id(g_candles_time), id(g_candles_icon),
+              id(g_havdalah_time), id(g_havdalah_icon),
+              id(g_hebrew_date), id(g_english_date),
+              id(g_parasha_hebrew), id(g_parasha_torah),
+              id(g_parasha_haftarah), id(g_daily_study),
+              id(g_parasha_english), id(g_zmanim),
+              id(g_upcoming), id(g_today_notes), id(g_shofar_status));
         } else if (mode == 1) {
           render_location_screen(it, id(alef), id(alef_mid), id(mdi), id(background),
               id(geoname_id), id(geo_input));
@@ -48,6 +71,13 @@ display:
               id(ap_qr), wifi_ok, ssid, sig);
         }
 
+# ============================================================================
+# Touchscreen: XPT2046 resistive touch, shares SPI bus with LCD
+# ============================================================================
+# Touch transform has swap_xy + mirror_x to match the 90-degree display
+# rotation. This means physical horizontal swipes produce touch Y changes,
+# and physical vertical swipes produce touch X changes. The swipe detection
+# below checks dy (not dx) for horizontal movement accordingly.
 touchscreen:
   - id: main_touchscreen
     platform: xpt2046
@@ -67,7 +97,6 @@ touchscreen:
       - lambda: |-
           static int start_x = -1, start_y = -1;
           int mode = id(display_mode);
-          ESP_LOGD("touch", "state=%d x=%d y=%d start=(%d,%d)", touch.state, touch.x, touch.y, start_x, start_y);
           if (touch.state) {
             if (start_x < 0) {
               start_x = touch.x;
@@ -77,15 +106,12 @@ touchscreen:
             int dx = touch.x - start_x;
             int dy = touch.y - start_y;
             int dist = abs(dx) + abs(dy);
-            ESP_LOGD("touch", "release dx=%d dy=%d dist=%d mode=%d", dx, dy, dist, mode);
             // swap_xy is on: physical horizontal → touch Y, physical vertical → touch X
             if (dist > 50 && abs(dy) > abs(dx)) {
               if (dy > 0) {
-                ESP_LOGI("touch", "Swipe right -> WiFi mode");
                 id(display_mode) = 2;
                 id(main_display).update();
               } else {
-                ESP_LOGI("touch", "Swipe left -> Location mode");
                 id(display_mode) = 1;
                 id(main_display).update();
               }
@@ -127,7 +153,6 @@ touchscreen:
               // WiFi screen tap - check reset button
               int tx = start_x, ty = start_y;
               if (tx >= 40 && tx <= 440 && ty >= 190 && ty <= 230) {
-                ESP_LOGI("wifi", "User triggered WiFi reset - rebooting to safe mode");
                 id(display_mode) = 0;
                 App.safe_reboot();
               }

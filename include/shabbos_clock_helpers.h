@@ -8,19 +8,29 @@
 #include "esphome/core/helpers.h"
 #include "esphome/components/json/json_util.h"
 
+// ============================================================================
+// Macros
+// ============================================================================
+
+// JSON_GET: safely access a JSON field, returning "" if missing/null.
+// Usage: JSON_GET(obj, ["key"]["nested"])
 #define JSON_GET(obj, key) ((obj)key | "")
 
+// ============================================================================
 // Time helpers
+// ============================================================================
+
+// Parse "HH:MM" from an ISO datetime like "2026-08-23T12:26:00+10:00".
+// Returns -1 in both outputs if parsing fails.
 static void parse_time_from_iso(const char *iso, int &hour, int &minute) {
   hour = minute = -1;
   if (!iso || !*iso) return;
   sscanf(iso, "%*[^T]T%d:%d", &hour, &minute);
 }
 
-static std::string fmt_time_12h(const char *iso) {
-  if (!iso || !*iso) return "--:--";
-  int h = 0, m = 0;
-  if (sscanf(iso, "%*[^T]T%d:%d", &h, &m) < 2) return "--:--";
+// Format a 24h hour/minute pair into a 12h string like "12:26 PM".
+// Used by both fmt_time_from_api and the zmanim maariv calculation.
+static std::string format_12h(int h, int m) {
   const char *ampm = (h >= 12) ? "PM" : "AM";
   int h12 = h % 12;
   if (h12 == 0) h12 = 12;
@@ -28,6 +38,28 @@ static std::string fmt_time_12h(const char *iso) {
   snprintf(buf, sizeof(buf), "%d:%02d %s", h12, m, ampm);
   return std::string(buf);
 }
+
+// Format a full ISO datetime string ("2026-08-23T12:26:00+10:00") to 12h.
+// Used for candle lighting and havdalah times from the HebCal API.
+static std::string fmt_time_12h(const char *iso) {
+  if (!iso || !*iso) return "--:--";
+  int h = 0, m = 0;
+  if (sscanf(iso, "%*[^T]T%d:%d", &h, &m) < 2) return "--:--";
+  return format_12h(h, m);
+}
+
+// Format an ISO datetime from the zmanim API to 12h.
+// Same parsing as fmt_time_12h but takes const char* directly.
+static std::string fmt_time_from_api(const char *iso_dt) {
+  if (!iso_dt || !*iso_dt) return "--:--";
+  int h = 0, m = 0;
+  if (sscanf(iso_dt, "%*[^T]T%d:%d", &h, &m) < 2) return "--:--";
+  return format_12h(h, m);
+}
+
+// ============================================================================
+// Date helpers
+// ============================================================================
 
 // ESPTime day_of_week: 1=Sunday, 2=Monday ... 7=Saturday
 static const char *dow_name(int d) {
@@ -47,7 +79,13 @@ static const char *mon_full(int m) {
   return (m >= 1 && m <= 12) ? n[m-1] : "?";
 }
 
-// Reverse a UTF-8 string by code-point (not by byte) for RTL display
+// ============================================================================
+// String helpers
+// ============================================================================
+
+// Reverse a UTF-8 string by code-point (not by byte) for RTL display.
+// ESPHome's display renderer draws characters left-to-right, so Hebrew
+// text must be pre-reversed to appear correctly right-to-left on screen.
 static std::string rtl(const std::string &s) {
   std::string result;
   const char *end = s.c_str() + s.size();
@@ -65,7 +103,61 @@ static std::string rtl(const std::string &s) {
   return result;
 }
 
-// URL builder — 60-day window with leyning
+// Replace all occurrences of a UTF-8 substring with another.
+// Used to sanitize Hebrew geresh/gershayim to ASCII for fonts that
+// don't include those codepoints.
+static void replace_utf8(std::string &s, const std::string &from, const std::string &to) {
+  size_t pos = 0;
+  while ((pos = s.find(from, pos)) != std::string::npos) {
+    s.replace(pos, from.size(), to);
+    pos += to.size();
+  }
+}
+
+// Strip embedded newlines from a string (replaces with spaces).
+// HebCal API field values can contain \n which triggers font warnings
+// when passed to it.print(). Used for single-line display fields only;
+// multi-line fields (zmanim, upcoming, daily_study) must NOT be stripped.
+static void strip_newlines(std::string &s) {
+  for (size_t p = s.find('\n'); p != std::string::npos; p = s.find('\n', p))
+    s.replace(p, 1, " ");
+}
+
+// Truncate a string at the first comma.
+// Used for dailyRambam3 titles which contain multiple chapters separated
+// by commas; we only show the first one to save space.
+static std::string truncate_at_comma(const std::string &s) {
+  size_t pos = s.find(',');
+  if (pos != std::string::npos) return s.substr(0, pos);
+  return s;
+}
+
+// Check if a HebCal item's date matches today's date (yr/mo/dy).
+// Item date can be "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SS".
+static bool matches_today(const char *date_str, int yr, int mo, int dy) {
+  if (!date_str || !*date_str) return false;
+  int y = 0, m = 0, d = 0;
+  if (sscanf(date_str, "%d-%d-%d", &y, &m, &d) >= 3)
+    return y == yr && m == mo && d == dy;
+  return false;
+}
+
+// ============================================================================
+// Predefined locations
+// ============================================================================
+
+static const int GEONAME_PRESETS[] = {2147714, 5128581, 281184, 2643743, 293397};
+static const char *GEONAME_CITIES[] = {"Sydney","New York","Jerusalem","London","Tel Aviv"};
+static const int GEONAME_COUNT = 5;
+
+// ============================================================================
+// URL builders
+// ============================================================================
+
+// Build HebCal API URL for a 60-day window starting at the given date.
+// The 60-day window provides enough data for upcoming events without
+// requiring a second request. Includes leyning (Torah readings),
+// daily study, holidays, and candle lighting times.
 static std::string build_hebcal_url(int gid, int y, int m, int d) {
   int ey = y, em = m, ed = d;
   static const int dim[] = {31,28,31,30,31,30,31,31,30,31,30,31};
@@ -85,6 +177,9 @@ static std::string build_hebcal_url(int gid, int y, int m, int d) {
   return std::string(buf);
 }
 
+// Build HebCal zmanim API URL for a single date.
+// Returns detailed daily zmanim (mincha gedola, plag hamincha, sunset, etc.)
+// from a separate endpoint than the main HebCal API.
 static std::string build_zmanim_url(int gid, int y, int m, int d) {
   char buf[160];
   snprintf(buf, sizeof(buf),
@@ -93,74 +188,10 @@ static std::string build_zmanim_url(int gid, int y, int m, int d) {
   return std::string(buf);
 }
 
-static std::string build_geoname_url(int gid) {
-  return str_sprintf(
-    "http://www.hebcal.com/hebcal?v=1&cfg=json&geo=geoname&geonameid=%d", gid);
-}
+// ============================================================================
+// JSON response parsers
+// ============================================================================
 
-static bool parse_zmanim_response(JsonDocument &doc, const std::string &body) {
-  DeserializationError err = deserializeJson(doc, body);
-  if (err) {
-    ESP_LOGE("zmanim", "JSON error: %s", err.c_str());
-    return false;
-  }
-  ESP_LOGI("zmanim", "Parsed %d bytes OK", (int)body.length());
-  const char *mg = JSON_GET(doc, ["times"]["minchaGedola"]);
-  const char *plag = JSON_GET(doc, ["times"]["plagHaMincha"]);
-  const char *sun = JSON_GET(doc, ["times"]["sunset"]);
-  ESP_LOGI("zmanim", "minchaGedola='%s' plagHaMincha='%s' sunset='%s'",
-    mg ? mg : "(null)", plag ? plag : "(null)", sun ? sun : "(null)");
-  return true;
-}
-
-static std::string fmt_time_from_api(const char *iso_dt) {
-  if (!iso_dt || !*iso_dt) return "--:--";
-  int h = 0, m = 0;
-  if (sscanf(iso_dt, "%*[^T]T%d:%d", &h, &m) >= 2) {
-    const char *ampm = (h >= 12) ? "PM" : "AM";
-    int h12 = h % 12;
-    if (h12 == 0) h12 = 12;
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d:%02d %s", h12, m, ampm);
-    return std::string(buf);
-  }
-  return "--:--";
-}
-
-static std::string truncate_at_comma(const std::string &s) {
-  size_t pos = s.find(',');
-  if (pos != std::string::npos) return s.substr(0, pos);
-  return s;
-}
-
-// Build zmanim display string from API response
-static std::string build_zmanim_string(const JsonDocument &doc) {
-  const char *mg   = JSON_GET(doc, ["times"]["minchaGedola"]);
-  const char *plag = JSON_GET(doc, ["times"]["plagHaMincha"]);
-  const char *sun  = JSON_GET(doc, ["times"]["sunset"]);
-  if (!mg || !*mg || !plag || !*plag) return "";
-  std::string mincha_s = fmt_time_from_api(mg);
-  std::string plag_s   = fmt_time_from_api(plag);
-  std::string maariv_s = sun ? fmt_time_from_api(sun) : "--:--";
-  // Maariv ≈ 50 min after sunset → compute from sunset if available
-  if (sun) {
-    int h = 0, m = 0;
-    if (sscanf(sun, "%*[^T]T%d:%d", &h, &m) >= 2) {
-      m += 50;
-      if (m >= 60) { h++; m -= 60; }
-      const char *ampm = (h >= 12) ? "PM" : "AM";
-      int h12 = h % 12;
-      if (h12 == 0) h12 = 12;
-      char buf[16];
-      snprintf(buf, sizeof(buf), "%d:%02d %s", h12, m, ampm);
-      maariv_s = std::string(buf);
-    }
-  }
-  return str_sprintf("Mincha: %s\nPlag: %s\nMaariv: %s",
-    mincha_s.c_str(), plag_s.c_str(), maariv_s.c_str());
-}
-
-// Parse response
 static bool parse_hebcal_response(JsonDocument &doc, const std::string &body) {
   DeserializationError err = deserializeJson(doc, body);
   if (err) {
@@ -171,30 +202,57 @@ static bool parse_hebcal_response(JsonDocument &doc, const std::string &body) {
   return true;
 }
 
-// Predefined geonames
-static const int GEONAME_PRESETS[] = {2147714, 5128581, 281184, 2643743, 293397};
-static const char *GEONAME_CITIES[] = {"Sydney","New York","Jerusalem","London","Tel Aviv"};
-static const int GEONAME_COUNT = 5;
-
-// Extract all display data from the JsonDocument
-// Strip embedded newlines from HebCal strings (they trigger font warnings)
-static void strip_newlines(std::string &s) {
-  for (size_t p = s.find('\n'); p != std::string::npos; p = s.find('\n', p))
-    s.replace(p, 1, " ");
+static bool parse_zmanim_response(JsonDocument &doc, const std::string &body) {
+  DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    ESP_LOGE("zmanim", "JSON error: %s", err.c_str());
+    return false;
+  }
+  ESP_LOGI("zmanim", "Parsed %d bytes OK", (int)body.length());
+  return true;
 }
 
-// Check if a HebCal item's date matches today's date (yr/mo/dy)
-// Item date can be "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SS"
-static bool matches_today(const char *date_str, int yr, int mo, int dy) {
-  if (!date_str || !*date_str) return false;
-  int y = 0, m = 0, d = 0;
-  if (sscanf(date_str, "%d-%d-%d", &y, &m, &d) >= 3)
-    return y == yr && m == mo && d == dy;
-  return false;
+// ============================================================================
+// Data extraction
+// ============================================================================
+
+// Build the zmanim display string from the zmanim API response.
+// Extracts minchaGedola, plagHaMincha from the API and computes
+// Maariv as sunset + 50 minutes.
+// Returns empty string if required fields are missing.
+static std::string build_zmanim_string(const JsonDocument &doc) {
+  const char *mg   = JSON_GET(doc, ["times"]["minchaGedola"]);
+  const char *plag = JSON_GET(doc, ["times"]["plagHaMincha"]);
+  const char *sun  = JSON_GET(doc, ["times"]["sunset"]);
+  if (!mg || !*mg || !plag || !*plag) return "";
+  std::string mincha_s = fmt_time_from_api(mg);
+  std::string plag_s   = fmt_time_from_api(plag);
+  std::string maariv_s = "--:--";
+  // Maariv = sunset + 50 min (standard ashkenazi practice)
+  if (sun && *sun) {
+    int h = 0, m = 0;
+    if (sscanf(sun, "%*[^T]T%d:%d", &h, &m) >= 2) {
+      m += 50;
+      if (m >= 60) { h++; m -= 60; }
+      maariv_s = format_12h(h, m);
+    }
+  }
+  return str_sprintf("Mincha: %s\nPlag: %s\nMaariv: %s",
+    mincha_s.c_str(), plag_s.c_str(), maariv_s.c_str());
 }
 
+// Extract all display data from the HebCal and zmanim JSON documents.
+//
+// This is called ONCE after each data fetch (not on every render) to
+// pre-compute all display strings. The render functions then just draw
+// from these strings without any JSON parsing, keeping render time fast.
+//
+// The HebCal API returns a 60-day window of items. We filter by today's
+// date for daily items (candles, havdalah, dafyomi, etc.) and collect
+// upcoming holidays/rosh chodesh for the events list.
 static void extract_display_data(
     JsonDocument &doc,
+    JsonDocument &zmanim_doc,
     int yr, int mo, int dy, int hr, int mi, int dow, int geoname_idx,
     // outputs:
     std::string &header,
@@ -211,14 +269,14 @@ static void extract_display_data(
     std::string &parasha_english,
     std::string &zmanim,
     std::string &upcoming,
-    std::string &melachot_status,
+    std::string &today_notes,
     std::string &shofar_status,
     std::string &footer) {
 
   const char *city      = JSON_GET(doc, ["location"]["city"]);
   const char *first_hd  = JSON_GET(doc, ["items"][0]["hdate"]);
 
-  std::string candles_dt, candles_memo, havdalah_dt;
+  std::string candles_dt, havdalah_dt;
   std::string p_name, p_hebrew, p_torah, p_haftarah;
   std::string heb_today_hebrew;
   bool found_today = false;
@@ -231,15 +289,19 @@ static void extract_display_data(
   for (JsonObject obj : items) {
     const char *cat = JSON_GET(obj, ["category"]);
 
+    // Candle lighting — only for today's date
     if (!strcmp(cat, "candles")) {
       if (matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) {
         candles_dt = JSON_GET(obj, ["date"]);
-        candles_memo = JSON_GET(obj, ["memo"]);
       }
+
+    // Havdalah — only for today's date
     } else if (!strcmp(cat, "havdalah")) {
       if (matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) {
         havdalah_dt = JSON_GET(obj, ["date"]);
       }
+
+    // Parsha — capture the FIRST one in the 60-day range (current week's)
     } else if (!strcmp(cat, "parashat")) {
       if (!found_parsha) {
         p_name    = JSON_GET(obj, ["title"]);
@@ -248,6 +310,9 @@ static void extract_display_data(
         p_haftarah = JSON_GET(obj, ["leyning"]["haftarah"]);
         found_parsha = true;
       }
+
+    // Holiday — add to upcoming events list
+    // Also detect Yom Tov (affects melachot/shofar status)
     } else if (!strcmp(cat, "holiday")) {
       if (JSON_GET(obj, ["yomtov"]) && *JSON_GET(obj, ["yomtov"])) {
         is_yomtov = true;
@@ -257,21 +322,25 @@ static void extract_display_data(
       {
         const char *hd = JSON_GET(obj, ["hdate"]);
         const char *hb_raw = JSON_GET(obj, ["hebrew"]);
+        // Strip Hebrew year from both hdate and hebrew (last word)
         std::string hd_short(hd);
         size_t sp = hd_short.rfind(' ');
         if (sp != std::string::npos) hd_short.resize(sp);
         std::string hb(hb_raw);
         sp = hb.rfind(' ');
         if (sp != std::string::npos) hb.resize(sp);
+        // Gregorian date for display
         const char *gd = JSON_GET(obj, ["date"]);
         int gy = 0, gm = 0, gd_n = 0;
         char gb[16] = "";
         if (sscanf(gd, "%d-%d-%d", &gy, &gm, &gd_n) >= 3)
           snprintf(gb, sizeof(gb), "%d %s", gd_n, mon_short(gm));
+        // Format: title|hd_short|hebrew|greg_date
         upcoming += str_sprintf("%s|%s|%s|%s",
           JSON_GET(obj, ["title"]), hd_short.c_str(), hb.c_str(), gb);
       }
 
+    // Rosh Chodesh — same format as holidays
     } else if (!strcmp(cat, "roshchodesh")) {
       if (!upcoming.empty()) upcoming += "\n";
       {
@@ -292,11 +361,14 @@ static void extract_display_data(
           JSON_GET(obj, ["title"]), hd_short.c_str(), hb.c_str(), gb);
       }
 
+    // Omer counting — only for today, shown in today_notes
     } else if (!strcmp(cat, "omer")) {
       if (matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) {
-        if (!melachot_status.empty()) melachot_status += "\n";
-        melachot_status += JSON_GET(obj, ["title"]);
+        if (!today_notes.empty()) today_notes += "\n";
+        today_notes += JSON_GET(obj, ["title"]);
       }
+
+    // Hebrew date — find today's
     } else if (!strcmp(cat, "hebdate")) {
       if (!found_today) {
         int y2, m2, d2;
@@ -309,59 +381,57 @@ static void extract_display_data(
       }
     }
   }
+  // Fallback if today's hebdate wasn't found in the response
   if (!found_today) heb_today_hebrew = JSON_GET(doc, ["items"][0]["hebrew"]);
 
+  // Determine if currently Shabbat (for shofar logic only).
+  // Candle/havdalah times are already filtered to today, so we just
+  // check if we're in the Shabbat window based on day of week + times.
   int wd = (dow + 5) % 7;  // 0=Mon ... 5=Sat, 6=Sun
   int c_h = -1, c_m = -1, h_h = -1, h_m = -1;
   parse_time_from_iso(candles_dt.c_str(), c_h, c_m);
   parse_time_from_iso(havdalah_dt.c_str(), h_h, h_m);
-
   if (wd == 4 && c_h >= 0 && hr * 60 + mi >= c_h * 60 + c_m) is_shabbat = true;
   else if (wd == 5 && h_h >= 0 && hr * 60 + mi < h_h * 60 + h_m) is_shabbat = true;
 
+  // Detect Hebrew month for seasonal notes (Selichot, shofar)
   const char *heb_mon_ptr = strrchr(first_hd, ' ');
   const char *heb_mon = heb_mon_ptr ? heb_mon_ptr + 1 : "";
   bool is_elul = strstr(heb_mon, "Elul") || strstr(heb_mon, "\u05D0\u05DC\u05D5\u05DC");
   bool blow_shofar = is_elul && wd != 4 && wd != 5;
   bool is_tishrei = strstr(heb_mon, "Tishrei") || strstr(heb_mon, "\u05EA\u05E9\u05E8\u05D9");
 
-  // Format outputs
-
+  // ---- Format header ----
   header = str_sprintf("%s | %s %d %s %d | %s",
     first_hd, dow_name(dow), dy, mon_short(mo), yr, city);
 
+  // ---- Format candle/havdalah times ----
   candles_time = candles_dt.empty() ? "--:--" : fmt_time_12h(candles_dt.c_str());
-  candles_icon = "\U000F17D3";  // candelabra
+  candles_icon = "\U000F17D3";  // Material Design candle icon
   havdalah_time = havdalah_dt.empty() ? "--:--" : fmt_time_12h(havdalah_dt.c_str());
-  havdalah_icon = "\U000F059B";  // sunset
+  havdalah_icon = "\U000F059B";  // Material Design sunset icon
 
-  std::string heb_trimmed = heb_today_hebrew;
-  // Remove "of " prefix if present (e.g. "7th of Elul" → "7th Elul")
-  size_t ofpos = heb_trimmed.find(" of ");
-  if (ofpos != std::string::npos) heb_trimmed.replace(ofpos, 4, " ");
+  // ---- Format Hebrew date ----
+  // Remove "of " prefix if present (e.g. "7th of Elul" -> "7th Elul")
   hebrew_date = rtl(heb_today_hebrew);
-  // Sanitize geresh/gershayim to ASCII if font doesn't render them
-  auto replace_utf8 = [](std::string &s, const std::string &from, const std::string &to) {
-    size_t pos = 0;
-    while ((pos = s.find(from, pos)) != std::string::npos) {
-      s.replace(pos, from.size(), to);
-      pos += to.size();
-    }
-  };
+  // Replace geresh/gershayim with ASCII equivalents for font compatibility
   replace_utf8(hebrew_date, "\u05F3", "'");
   replace_utf8(hebrew_date, "\u05F4", "\"");
+
+  // ---- Format English date ----
   english_date = str_sprintf("%s, %d %s %d", dow_full(dow), dy, mon_full(mo), yr);
 
-  // Parasha: strip "Parashat " prefix from Hebrew name, then RTL
+  // ---- Format parsha ----
+  // Strip "פרשת " prefix from Hebrew name, then RTL for display
   std::string p_heb_display = p_hebrew;
   if (p_heb_display.find("\u05E4\u05E8\u05E9\u05EA") == 0)
-    p_heb_display = p_heb_display.substr(8);  // "פרשת " (5+1 space)
+    p_heb_display = p_heb_display.substr(8);  // "פרשת " = 5 chars + 1 space = 6 bytes... actually 8 UTF-8 bytes
   parasha_hebrew = rtl(p_heb_display);
   parasha_torah  = p_torah;
   parasha_english = p_name;
   parasha_haftarah = p_haftarah;
 
-  // Daily study — dafyomi, tehillim, rambam for today only
+  // ---- Daily study (daf yomi, psalms, rambam) — today only ----
   daily_study.clear();
   for (JsonObject obj : items) {
     if (!matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) continue;
@@ -374,59 +444,28 @@ static void extract_display_data(
       daily_study += JSON_GET(obj, ["title"]);
     } else if (!strcmp(cat, "dailyRambam3")) {
       if (!daily_study.empty()) daily_study += "\n";
+      // Only show first chapter (truncate at comma)
       daily_study += truncate_at_comma(JSON_GET(obj, ["title"]));
     }
   }
 
-  // Zmanim: estimate sunset from candle/havdalah, calculate Plag/Maariv/Mincha
-  zmanim.clear();
-  int sun_h = -1, sun_m = -1;
-  if (c_h >= 0) {
-    // Candle = sunset - 18 min → sunset = candle + 18
-    sun_h = c_h;
-    sun_m = c_m + 18;
-    if (sun_m >= 60) { sun_h++; sun_m -= 60; }
-  } else if (h_h >= 0) {
-    // Havdalah = sunset + 50 min → sunset = havdalah - 50
-    sun_h = h_h;
-    sun_m = h_m - 50;
-    if (sun_m < 0) { sun_h--; sun_m += 60; }
-  }
-  if (sun_h >= 0) {
-    // Estimate chatzot (midday) = sunset - 6h (rough), Mincha Gedola = chatzot + 30m
-    int mincha_h = sun_h - 6, mincha_m = sun_m;
-    while (mincha_m < 0) { mincha_h--; mincha_m += 60; }
-    mincha_m += 30;
-    while (mincha_m >= 60) { mincha_h++; mincha_m -= 60; }
-    // Plag HaMincha: 75 min before sunset
-    int plag_h = sun_h, plag_m = sun_m - 75;
-    while (plag_m < 0) { plag_h--; plag_m += 60; }
-    // Earliest Maariv: 50 min after sunset
-    int maariv_h = sun_h, maariv_m = sun_m + 50;
-    while (maariv_m >= 60) { maariv_h++; maariv_m -= 60; }
-    // Format using ISO-like timestamps for fmt_time_12h
-    char iso_buf[32];
-    snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", mincha_h, mincha_m);
-    std::string mincha_str = fmt_time_12h(iso_buf);
-    snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", plag_h, plag_m);
-    std::string plag_str = fmt_time_12h(iso_buf);
-    snprintf(iso_buf, sizeof(iso_buf), "T%02d:%02d:00", maariv_h, maariv_m);
-    std::string maariv_str = fmt_time_12h(iso_buf);
-    zmanim = str_sprintf("Mincha: %s\nPlag: %s\nMaariv: %s",
-      mincha_str.c_str(), plag_str.c_str(), maariv_str.c_str());
-  }
+  // ---- Zmanim — from API, fallback to empty ----
+  // The zmanim API provides accurate minchaGedola, plagHaMincha, and sunset.
+  // We compute Maariv as sunset + 50 min. If the API data is missing,
+  // zmanim stays empty and the display shows nothing for that section.
+  zmanim = build_zmanim_string(zmanim_doc);
 
-  // Today notes (omer, selichot season, etc.)
+  // ---- Today notes (Omer, Selichot season) ----
   if (is_elul) {
-    if (!melachot_status.empty()) melachot_status += "\n";
-    melachot_status += "Selichot season";
+    if (!today_notes.empty()) today_notes += "\n";
+    today_notes += "Selichot season";
   }
   if (is_tishrei) {
-    if (!melachot_status.empty()) melachot_status += "\n";
-    melachot_status += "Selichot / Yomim Noraim";
+    if (!today_notes.empty()) today_notes += "\n";
+    today_notes += "Selichot / Yomim Noraim";
   }
 
-  // Shofar
+  // ---- Shofar status ----
   if (blow_shofar)
     shofar_status = str_sprintf("Shofar today! \u05EA\u05E7\u05D9\u05E2\u05D4 \u05E9\u05D1\u05E8\u05D9\u05DD \u05EA\u05E8\u05D5\u05E2\u05D4");
   else if (is_elul)
@@ -436,7 +475,7 @@ static void extract_display_data(
   else
     shofar_status = "";
 
-  // Sanitize all display strings — strip embedded newlines to avoid font warnings
+  // ---- Sanitize single-line fields (NOT multi-line: zmanim, upcoming, daily_study) ----
   strip_newlines(candles_time);
   strip_newlines(havdalah_time);
   strip_newlines(hebrew_date);
@@ -445,37 +484,52 @@ static void extract_display_data(
   strip_newlines(parasha_torah);
   strip_newlines(parasha_haftarah);
   strip_newlines(parasha_english);
-  strip_newlines(melachot_status);
+  strip_newlines(today_notes);
   strip_newlines(shofar_status);
 
-  // Footer
+  // ---- Footer ----
   footer = str_sprintf("%s | %s", heb_mon, GEONAME_CITIES[geoname_idx]);
 }
 
-// Template rendering function — accepts any display/font/image types
+// ============================================================================
+// Rendering: Main Shabbos clock screen
+// ============================================================================
+
+// Renders the main Shabbos clock screen from pre-computed display strings.
+//
+// IMPORTANT: This function does NOT parse any JSON. All data extraction
+// happens in extract_display_data() which is called once after each data
+// fetch (every 2 hours). This function just draws from the pre-computed
+// strings, keeping render time under ~3 seconds instead of adding the
+// overhead of JSON parsing on every frame.
+//
+// Layout: 4-quadrant grid on a 480x320 display
+//   Top-Left:  Times (candle, havdalah, shofar, zmanim)
+//   Top-Right: Parsha (English name, Hebrew name, Torah, Haftarah)
+//   Bot-Left:  Today (Hebrew date, English date, notes, daily study)
+//   Bot-Right: Upcoming events
+// Plus a 28px header bar and 32px footer bar.
 template<typename TDisplay, typename TFont, typename TIconFont, typename TImage>
 static void render_shabbos(
     TDisplay &it,
-    JsonDocument &doc,
     TFont *font_small,
     TFont *font_mid,
     TIconFont *font_icons,
     TImage *bg_img,
-    JsonDocument &zmanim_json,
-    int yr, int mo, int dy, int hr, int mi, int dow,
-    int geoname_idx) {
-
-  std::string hdr, ct, ci, ht, hi, hd, ed, ph, pe, pt, paf, ds, zm, up, ms, ss, ft;
-  extract_display_data(doc, yr, mo, dy, hr, mi, dow, geoname_idx,
-      hdr, ct, ci, ht, hi, hd, ed, ph, pe, pt, paf, ds, zm, up, ms, ss, ft);
-  // Override zmanim with API data if available
-  std::string api_zm = build_zmanim_string(zmanim_json);
-  if (!api_zm.empty()) {
-    ESP_LOGI("zmanim", "Using API zmanim: '%s'", api_zm.c_str());
-    zm = api_zm;
-  } else {
-    ESP_LOGW("zmanim", "API zmanim empty, fallback to calculated");
-  }
+    const std::string &hdr,
+    const std::string &candles_time, const std::string &candles_icon,
+    const std::string &havdalah_time, const std::string &havdalah_icon,
+    const std::string &hebrew_date,
+    const std::string &english_date,
+    const std::string &parasha_hebrew,
+    const std::string &parasha_torah,
+    const std::string &parasha_haftarah,
+    const std::string &daily_study,
+    const std::string &parasha_english,
+    const std::string &zmanim,
+    const std::string &upcoming,
+    const std::string &today_notes,
+    const std::string &shofar_status) {
 
   auto c_bg    = Color(0, 0, 0);
   auto c_gold  = Color(255, 200, 100);
@@ -483,98 +537,117 @@ static void render_shabbos(
   auto c_dim   = Color(160, 160, 160);
   auto c_div   = Color(50, 50, 40);
 
+  // Draw background image first, then overlay boxes on top
   if (bg_img) it.image(0, 0, bg_img);
 
+  // ---- Header bar (full width, 28px) ----
   it.filled_rectangle(0, 0, 480, 28, c_bg);
   it.print(240, 6, font_small, c_wht, TextAlign::CENTER, hdr.c_str());
 
-  // Draw dividers between the 4 quadrants
-  it.filled_rectangle(0, 145, 480, 1, c_div);
-  it.filled_rectangle(190, 32, 1, 113, c_div);   // top vertical
-  it.filled_rectangle(240, 145, 1, 142, c_div);  // bottom vertical
+  // ---- Dividers between the 4 quadrants ----
+  // Top boxes are asymmetric: left=190px (times), right=290px (parsha text)
+  // Bottom boxes are equal width (240px each)
+  it.filled_rectangle(0, 145, 480, 1, c_div);             // horizontal
+  it.filled_rectangle(190, 32, 1, 113, c_div);             // top vertical (at x=190)
+  it.filled_rectangle(240, 145, 1, 142, c_div);            // bottom vertical (at x=240)
 
-  int mx = 8, my = 34;               // margin x/y from box edges
-  int col_w_l = 182, col_w_r = 286;  // top left/right column widths
-  int col_w_b = 232;                 // bottom column width (equal)
+  int mx = 8, my = 34;               // content margin from box edges
+  int col_w_l = 182, col_w_r = 286;  // top left/right box widths
+  int col_w_b = 232;                 // bottom box width (equal for both)
   int box_h_t = 111, box_h_b = 138;  // top/bottom box heights
 
-  // ---- Top-Left: Times ----------------------------------------------------
+  // ---- Top-Left: Times (candle, havdalah, shofar, mincha/plag/maariv) ----
   int x = mx, y = my;
   it.filled_rectangle(x - 4, y - 4, col_w_l, box_h_t, c_bg);
-  if (ct != "--:--") {
-    it.print(x, y, font_icons, c_gold, ci.c_str());
-    it.print(x + 24, y, font_mid, c_gold, ct.c_str()); y += 22;
+  // Candle lighting (shown only when valid for today)
+  if (candles_time != "--:--") {
+    it.print(x, y, font_icons, c_gold, candles_icon.c_str());
+    it.print(x + 24, y, font_mid, c_gold, candles_time.c_str()); y += 22;
   }
-  if (ht != "--:--") {
-    it.print(x, y, font_icons, c_gold, hi.c_str());
-    it.print(x + 24, y, font_mid, c_gold, ht.c_str()); y += 22;
+  // Havdalah (shown only when valid for today)
+  if (havdalah_time != "--:--") {
+    it.print(x, y, font_icons, c_gold, havdalah_icon.c_str());
+    it.print(x + 24, y, font_mid, c_gold, havdalah_time.c_str()); y += 22;
   }
-  if (!ss.empty()) {
-    it.print(x, y, font_small, c_gold, ss.c_str()); y += 16;
+  // Shofar status (Elul/Tishrei only)
+  if (!shofar_status.empty()) {
+    it.print(x, y, font_small, c_gold, shofar_status.c_str()); y += 16;
   }
-  if (!zm.empty()) {
+  // Zmanim (Mincha, Plag, Maariv — each on its own line)
+  if (!zmanim.empty()) {
     std::string::size_type pos = 0;
     while (true) {
-      auto nl = zm.find('\n', pos);
-      if (nl == zm.npos) {
-        it.print(x, y, font_small, c_dim, zm.substr(pos).c_str());
+      auto nl = zmanim.find('\n', pos);
+      if (nl == zmanim.npos) {
+        it.print(x, y, font_small, c_dim, zmanim.substr(pos).c_str());
         break;
       }
-      it.print(x, y, font_small, c_dim, zm.substr(pos, nl - pos).c_str());
+      it.print(x, y, font_small, c_dim, zmanim.substr(pos, nl - pos).c_str());
       y += 16;
       pos = nl + 1;
     }
   }
-  // ---- Top-Right: Parsha (name + readings) --------------------------------
+
+  // ---- Top-Right: Parsha (English name, Hebrew name, Torah, Haftarah) ----
   x = 194; y = my;
   it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_t, c_bg);
-  it.print(x, y, font_icons, c_dim, "\U000F1CCC");
-  if (!ds.empty()) { it.print(x + 22, y, font_small, c_gold, ds.c_str()); y += 14; }
-  if (!ph.empty()) { it.print(x + col_w_r - 4, y, font_small, c_wht, TextAlign::RIGHT, ph.c_str()); y += 14; }
-  if (!pe.empty()) { it.print(x, y, font_small, c_wht, pe.c_str()); y += 14; }
-  if (!pt.empty()) { it.print(x, y, font_small, c_wht, pt.c_str()); y += 14; }
+  it.print(x, y, font_icons, c_dim, "\U000F1CCC");  // book icon
+  // English parsha name (gold, next to book icon)
+  if (!parasha_english.empty()) { it.print(x + 22, y, font_small, c_gold, parasha_english.c_str()); y += 14; }
+  // Hebrew parsha name (white, right-aligned — Hebrew reads R-to-L)
+  if (!parasha_hebrew.empty()) { it.print(x + col_w_r - 4, y, font_small, c_wht, TextAlign::RIGHT, parasha_hebrew.c_str()); y += 14; }
+  // Torah reading
+  if (!parasha_torah.empty()) { it.print(x, y, font_small, c_wht, parasha_torah.c_str()); y += 14; }
+  // Haftarah reading
+  if (!parasha_haftarah.empty()) { it.print(x, y, font_small, c_wht, parasha_haftarah.c_str()); y += 14; }
 
-  // ---- Bottom-Left: Day info (date + daily study) -------------------------
+  // ---- Bottom-Left: Today (Hebrew date, English date, notes, daily study) ----
   x = mx; y = 149;
   it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
-  it.print(x + col_w_b - 4, y, font_mid, c_wht, TextAlign::RIGHT, hd.c_str()); y += 20;
-  it.print(x, y, font_small, c_wht, ed.c_str()); y += 16;
-  if (!ms.empty()) {
+  // Hebrew date (right-aligned — Hebrew reads R-to-L)
+  it.print(x + col_w_b - 4, y, font_mid, c_wht, TextAlign::RIGHT, hebrew_date.c_str()); y += 20;
+  // English date
+  it.print(x, y, font_small, c_wht, english_date.c_str()); y += 16;
+  // Today notes (Omer, Selichot — gold)
+  if (!today_notes.empty()) {
     std::string::size_type pos = 0;
     while (true) {
-      auto nl = ms.find('\n', pos);
-      if (nl == ms.npos) {
-        it.print(x, y, font_small, c_gold, ms.substr(pos).c_str());
+      auto nl = today_notes.find('\n', pos);
+      if (nl == today_notes.npos) {
+        it.print(x, y, font_small, c_gold, today_notes.substr(pos).c_str());
         break;
       }
-      it.print(x, y, font_small, c_gold, ms.substr(pos, nl - pos).c_str());
+      it.print(x, y, font_small, c_gold, today_notes.substr(pos, nl - pos).c_str());
       y += 16;
       pos = nl + 1;
     }
   }
-  if (!paf.empty()) {
+  // Daily study (Daf Yomi, Psalms, Rambam — dim)
+  if (!daily_study.empty()) {
     std::string::size_type pos = 0;
     while (true) {
-      auto nl = paf.find('\n', pos);
-      if (nl == paf.npos) {
-        it.print(x, y, font_small, c_dim, paf.substr(pos).c_str());
+      auto nl = daily_study.find('\n', pos);
+      if (nl == daily_study.npos) {
+        it.print(x, y, font_small, c_dim, daily_study.substr(pos).c_str());
         break;
       }
-      it.print(x, y, font_small, c_dim, paf.substr(pos, nl - pos).c_str());
+      it.print(x, y, font_small, c_dim, daily_study.substr(pos, nl - pos).c_str());
       y += 16;
       pos = nl + 1;
     }
   }
 
-  // ---- Bottom-Right: Upcoming ---------------------------------------------
+  // ---- Bottom-Right: Upcoming events ----
+  // Each event is stored as: title|hd_short|hebrew|greg_date
+  // Rendered as: line 1 = dates, line 2 = English name + Hebrew name (RTL)
   x = 244; y = 149;
   it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
-  if (!up.empty()) {
+  if (!upcoming.empty()) {
     std::string::size_type pos = 0;
     while (true) {
-      auto nl = up.find('\n', pos);
-      std::string evt = (nl == up.npos) ? up.substr(pos) : up.substr(pos, nl - pos);
-      // Fields: title|hd_short|hebrew|greg_date
+      auto nl = upcoming.find('\n', pos);
+      std::string evt = (nl == upcoming.npos) ? upcoming.substr(pos) : upcoming.substr(pos, nl - pos);
+      // Split on '|' to get the 4 fields
       size_t p1 = evt.find('|');
       size_t p2 = p1 != std::string::npos ? evt.find('|', p1 + 1) : std::string::npos;
       size_t p3 = p2 != std::string::npos ? evt.find('|', p2 + 1) : std::string::npos;
@@ -582,28 +655,30 @@ static void render_shabbos(
       std::string hd_s    = (p2 != std::string::npos) ? evt.substr(p1 + 1, p2 - p1 - 1) : "";
       std::string heb     = (p3 != std::string::npos) ? evt.substr(p2 + 1, p3 - p2 - 1) : "";
       std::string greg_s  = (p3 != std::string::npos) ? evt.substr(p3 + 1) : "";
-      // Line 1: Hebrew date in English + Gregorian date
+      // Line 1: Hebrew date (English) + Gregorian date
       std::string date_line = hd_s;
       if (!greg_s.empty()) date_line += "  " + greg_s;
       if (!date_line.empty()) { it.print(x, y, font_small, c_dim, date_line.c_str()); y += 14; }
-      // Line 2: English name + reversed Hebrew name on same line
+      // Line 2: English name + Hebrew name (reversed for RTL display)
       std::string name_line = title;
       if (!heb.empty()) name_line += "  " + rtl(heb);
       if (!name_line.empty()) { it.print(x, y, font_small, c_wht, name_line.c_str()); y += 14; }
-      // 6pt gap before next event
+      // 6px gap before next event
       y += 6;
-      if (nl == up.npos) break;
+      if (nl == upcoming.npos) break;
       pos = nl + 1;
     }
   }
 
+  // ---- Footer bar (full width, 32px) ----
   it.filled_rectangle(0, 288, 480, 32, c_bg);
   it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Left to set location, Swipe Right to setup Wifi");
 }
 
-// ============================================================
-// Location settings screen (swipe left)
-// ============================================================
+// ============================================================================
+// Rendering: Location settings screen (swipe left from main screen)
+// ============================================================================
+
 template<typename TDisplay, typename TFont, typename TIconFont, typename TImage>
 static void render_location_screen(
     TDisplay &it,
@@ -680,9 +755,10 @@ static void render_location_screen(
   it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Right to return");
 }
 
-// ============================================================
-// WiFi settings screen (swipe right)
-// ============================================================
+// ============================================================================
+// Rendering: WiFi settings screen (swipe right from main screen)
+// ============================================================================
+
 template<typename TDisplay, typename TFont, typename TIconFont, typename TImage, typename TQr>
 static void render_wifi_screen(
     TDisplay &it,
@@ -741,5 +817,3 @@ static void render_wifi_screen(
   it.filled_rectangle(0, 288, 480, 32, c_bg);
   it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Left to return");
 }
-
-
