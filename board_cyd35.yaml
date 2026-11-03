@@ -42,11 +42,11 @@ binary_sensor:
     on_press:
       - lambda: |-
           id(button_press_time) = millis();
-          ESP_LOGI("nav", "Boot button PRESSED at %u", id(button_press_time));
+          ESP_LOGI("nav", "Boot button PRESSED at %lu", (unsigned long)id(button_press_time));
     on_release:
       - lambda: |-
           uint32_t duration = millis() - id(button_press_time);
-          ESP_LOGI("nav", "Boot button RELEASED after %u ms", duration);
+          ESP_LOGI("nav", "Boot button RELEASED after %lu ms", (unsigned long)duration);
           if (duration < 1000) {
             id(show_qr) = !id(show_qr);
             id(need_display_update) = true;
