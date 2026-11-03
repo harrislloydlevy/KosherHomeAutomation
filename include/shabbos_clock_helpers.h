@@ -705,6 +705,9 @@ static void render_shabbos(
 
   // ---- Header bar (full width, 28px) ----
   it.print(240, 6, font_small, c_wht, TextAlign::CENTER, hdr.c_str());
+  // Current wall-clock time (top-right of header)
+  std::string now_s = format_12h(cur_hour, cur_minute);
+  it.print(472, 6, font_small, c_wht, TextAlign::RIGHT, now_s.c_str());
 
   // ---- Vertical divider between left/right columns ----
   it.filled_rectangle(190, 28, 1, 260, c_div);
