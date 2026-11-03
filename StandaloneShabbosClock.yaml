@@ -145,7 +145,7 @@ script:
     then:
       - logger.log: "Fetching HebCal data"
       - http_request.get:
-            max_response_buffer_size: 98304
+            max_response_buffer_size: 49152
             url: !lambda |-
                 auto t = id(sntp_time).now();
                 return build_hebcal_url(id(geoname_id), t.year, t.month, t.day_of_month);
@@ -213,6 +213,7 @@ script:
                               id(g_upcoming), id(g_today_notes),
                               id(g_shofar_status), id(g_footer));
                           id(data_ready) = true;
+                          ESP_LOGI("shabbos", "data_ready set true");
                       - lambda: |-
                           id(main_display).update();
 
