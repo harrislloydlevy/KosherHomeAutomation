@@ -919,7 +919,11 @@ static void render_location_screen(
     TImage *bg_img,
     int geoname_id,
     const std::string &input,
-    bool custom_mode) {
+    bool custom_mode,
+    bool wifi_connected,
+    const std::string &wifi_ssid,
+    float signal_dbm,
+    TQr *ap_qr) {
 
   auto c_bg    = Color(0, 0, 0);
   auto c_gold  = Color(255, 200, 100);
@@ -934,6 +938,21 @@ static void render_location_screen(
   // Header
   it.filled_rectangle(0, 0, 480, 28, c_bg);
   it.print(4, 6, font_small, c_wht, "Set Location");
+
+  // WiFi status line
+  {
+    auto c_st = wifi_connected ? c_gold : c_red;
+    if (wifi_connected) {
+      char wbuf[64];
+      snprintf(wbuf, sizeof(wbuf), "WiFi: %s  %.0f dBm", wifi_ssid.c_str(), isnan(signal_dbm) ? 0.0f : signal_dbm);
+      it.print(10, 30, font_small, c_st, wbuf);
+    } else {
+      it.print(10, 30, font_small, c_st, "WiFi: AP mode - scan QR to connect");
+      // QR code for AP mode (small, top-right to avoid preset overlap)
+      it.print(440, 30, font_small, c_dim, TextAlign::CENTER, "Scan");
+      it.qr_code(425, 44, ap_qr, c_wht, 1);
+    }
+  }
 
   if (!custom_mode) {
     // Preset city grid: 2 columns x 3 rows
@@ -1007,7 +1026,7 @@ static void render_location_screen(
     it.print(240, 295, font_mid, c_wht, TextAlign::CENTER, "Save");
   } else {
     it.filled_rectangle(0, 288, 480, 32, c_bg);
-    it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Tap a city or Back");
+    it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Tap city/Custom/Back (boot btn = AP reset)");
   }
 }
 
