@@ -208,7 +208,7 @@ static const int GEONAME_COUNT = 6;
 static std::string build_hebcal_url(int gid, int y, int m, int d) {
   int ey = y, em = m, ed = d;
   static const int dim[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-  for (int i = 0; i < 30; i++) {
+  for (int i = 0; i < 24; i++) {
     int lim = dim[em - 1];
     if (em == 2 && (ey % 4 == 0 && (ey % 100 != 0 || ey % 400 == 0))) lim = 29;
     if (++ed > lim) { ed = 1; if (++em > 12) { em = 1; ey++; } }

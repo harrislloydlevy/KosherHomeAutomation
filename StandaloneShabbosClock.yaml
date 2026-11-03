@@ -165,7 +165,7 @@ script:
     then:
       - logger.log: "Fetching HebCal data"
       - http_request.get:
-            max_response_buffer_size: 49152
+            max_response_buffer_size: 40960
             url: !lambda |-
                 auto t = id(sntp_time).now();
                 return build_hebcal_url(id(geoname_id), t.year, t.month, t.day_of_month);
