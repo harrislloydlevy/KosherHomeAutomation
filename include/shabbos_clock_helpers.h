@@ -398,9 +398,22 @@ static void extract_display_data(
   if (wd == 4 && c_h >= 0 && hr * 60 + mi >= c_h * 60 + c_m) is_shabbat = true;
   else if (wd == 5 && h_h >= 0 && hr * 60 + mi < h_h * 60 + h_m) is_shabbat = true;
 
-  // Detect Hebrew month for seasonal notes (Selichot, shofar)
-  const char *heb_mon_ptr = strrchr(first_hd, ' ');
-  const char *heb_mon = heb_mon_ptr ? heb_mon_ptr + 1 : "";
+  // Detect Hebrew month for seasonal notes (Selichot, shofar).
+  // hdate format is "DAY MONTH YEAR" (e.g. "23 Cheshvan 5787"), so the
+  // month is the middle word, not the last (which is the year).
+  std::string heb_mon_str;
+  {
+    std::string hd(first_hd);
+    size_t last_sp = hd.rfind(' ');
+    size_t prev_sp = (last_sp == std::string::npos) ? std::string::npos : hd.rfind(' ', last_sp > 0 ? last_sp - 1 : 0);
+    if (last_sp != std::string::npos) {
+      if (prev_sp == std::string::npos)
+        heb_mon_str = hd.substr(0, last_sp);
+      else
+        heb_mon_str = hd.substr(prev_sp + 1, last_sp - prev_sp - 1);
+    }
+  }
+  const char *heb_mon = heb_mon_str.c_str();
   bool is_elul = strstr(heb_mon, "Elul") || strstr(heb_mon, "\u05D0\u05DC\u05D5\u05DC");
   bool blow_shofar = is_elul && wd != 4 && wd != 5;
   bool is_tishrei = strstr(heb_mon, "Tishrei") || strstr(heb_mon, "\u05EA\u05E9\u05E8\u05D9");
@@ -428,8 +441,13 @@ static void extract_display_data(
   // ---- Format parsha ----
   // Strip "פרשת " prefix from Hebrew name, then RTL for display
   std::string p_heb_display = p_hebrew;
-  if (p_heb_display.find("\u05E4\u05E8\u05E9\u05EA") == 0)
-    p_heb_display = p_heb_display.substr(8);  // "פרשת " = 5 chars + 1 space = 6 bytes... actually 8 UTF-8 bytes
+  if (p_heb_display.find("\u05E4\u05E8\u05E9\u05EA") == 0) {
+    // "פרשת " = 4 Hebrew letters (8 UTF-8 bytes) + 1 space = 9 bytes
+    if (p_heb_display.size() > 8 && p_heb_display[8] == ' ')
+      p_heb_display = p_heb_display.substr(9);
+    else
+      p_heb_display = p_heb_display.substr(8);
+  }
   parasha_hebrew = rtl(p_heb_display);
   parasha_torah  = p_torah;
   parasha_english = p_name;
@@ -470,9 +488,10 @@ static void extract_display_data(
   }
 
   // ---- Shofar status ----
-  if (blow_shofar)
-    shofar_status = str_sprintf("Shofar today! \u05EA\u05E7\u05D9\u05E2\u05D4 \u05E9\u05D1\u05E8\u05D9\u05DD \u05EA\u05E8\u05D5\u05E2\u05D4");
-  else if (is_elul)
+  if (blow_shofar) {
+    std::string shofar_heb = rtl("\u05EA\u05E7\u05D9\u05E2\u05D4 \u05E9\u05D1\u05E8\u05D9\u05DD \u05EA\u05E8\u05D5\u05E2\u05D4");
+    shofar_status = str_sprintf("Shofar today! %s", shofar_heb.c_str());
+  } else if (is_elul)
     shofar_status = "Shabbat \u2014 no shofar";
   else if (is_tishrei)
     shofar_status = "Tishrei \u2014 Selichot / Yomim Noraim";
@@ -556,7 +575,7 @@ static void render_shabbos(
   it.filled_rectangle(240, 145, 1, 142, c_div);            // bottom vertical (at x=240)
 
   int mx = 8, my = 34;               // content margin from box edges
-  int col_w_l = 186, col_w_r = 290;  // top left/right box widths (edge to edge)
+  int col_w_l = 190, col_w_r = 290;  // top left/right box widths (edge to edge)
   int col_w_b = 240;                 // bottom box width (edge to divider to edge)
   int box_h_t = 111, box_h_b = 138;  // top/bottom box heights
 
@@ -744,7 +763,7 @@ static void render_location_screen(
     int ty = y + 4;
     if (i == 9) {
       // Backspace icon
-      it.print(tx - 16, ty + 2, font_mid, c_gold, "\U000F049A");
+      it.print(tx - 16, ty + 2, font_icons, c_gold, "\U000F049A");
     } else if (i == 11) {
       // Submit checkmark
       it.print(tx - 8, ty + 2, font_mid, c_gold, "\u2714");
