@@ -672,9 +672,7 @@ static void render_shabbos(
     const std::string &today_notes,
     const std::string &shofar_status) {
 
-  auto c_wht  = Color(255, 200, 100);
   auto c_wht   = Color(255, 255, 255);
-  auto c_wht   = Color(160, 160, 160);
   auto c_div   = Color(50, 50, 40);
 
   // Background image (already darkened on disk for semi-transparent boxes).
