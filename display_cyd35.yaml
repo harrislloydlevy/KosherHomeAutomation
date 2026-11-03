@@ -25,7 +25,7 @@ display:
     dc_pin:
       number: GPIO2
       ignore_strapping_warning: true
-    data_rate: 10MHz
+    data_rate: 40MHz
     auto_clear_enabled: false
     rotation: 90
     transform:
