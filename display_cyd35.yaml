@@ -99,128 +99,130 @@ touchscreen:
     transform:
       swap_xy: true
       mirror_x: true
-    on_touch:
+    on_update:
       - lambda: |-
           static int start_x = -1, start_y = -1;
           static int last_x = -1, last_y = -1;
           int mode = id(display_mode);
-          if (touch.state) {
+
+          if (!touches.empty()) {
             if (start_x < 0) {
-              start_x = touch.x;
-              start_y = touch.y;
-              last_x = touch.x;
-              last_y = touch.y;
-              ESP_LOGI("touch", "DOWN x=%d y=%d", touch.x, touch.y);
+              start_x = touches[0].x;
+              start_y = touches[0].y;
+              last_x = touches[0].x;
+              last_y = touches[0].y;
+              ESP_LOGI("touch", "DOWN x=%d y=%d", touches[0].x, touches[0].y);
             } else {
-              if (touch.x > 0 || touch.y > 0) {
-                last_x = touch.x;
-                last_y = touch.y;
-              }
+              last_x = touches[0].x;
+              last_y = touches[0].y;
             }
-          } else if (start_x >= 0) {
-            int ex = (last_x >= 0) ? last_x : start_x;
-            int ey = (last_y >= 0) ? last_y : start_y;
-            int dx = ex - start_x;
-            int dy = ey - start_y;
-            int dist = abs(dx) + abs(dy);
-            bool swipe = (dist > 50 && abs(dy) > abs(dx));
-            ESP_LOGI("touch", "UP start=(%d,%d) end=(%d,%d) dx=%d dy=%d dist=%d swipe=%d mode=%d",
-              start_x, start_y, ex, ey, dx, dy, dist, swipe, mode);
+          } else {
+            if (start_x >= 0) {
+              int ex = (last_x >= 0) ? last_x : start_x;
+              int ey = (last_y >= 0) ? last_y : start_y;
+              int dx = ex - start_x;
+              int dy = ey - start_y;
+              int dist = abs(dx) + abs(dy);
+              bool swipe = (dist > 50 && abs(dy) > abs(dx));
+              ESP_LOGI("touch", "UP start=(%d,%d) end=(%d,%d) dx=%d dy=%d dist=%d swipe=%d mode=%d",
+                start_x, start_y, ex, ey, dx, dy, dist, swipe, mode);
 
-            if (mode == 0) {
-              if (swipe) {
-                if (dy > 0) {
-                  id(display_mode) = 2;
-                  ESP_LOGI("touch", "Swipe DOWN -> WiFi screen");
+              if (mode == 0) {
+                if (swipe) {
+                  if (dy > 0) {
+                    id(display_mode) = 2;
+                    ESP_LOGI("touch", "Swipe DOWN -> WiFi screen");
+                  } else {
+                    id(display_mode) = 1;
+                    ESP_LOGI("touch", "Swipe UP -> Location screen");
+                  }
+                  id(main_display).update();
                 } else {
-                  id(display_mode) = 1;
-                  ESP_LOGI("touch", "Swipe UP -> Location screen");
+                  ESP_LOGI("touch", "Tap on main (no swipe)");
                 }
-                id(main_display).update();
               } else {
-                ESP_LOGI("touch", "Tap on main (no swipe)");
-              }
-            } else {
-              if (swipe) {
-                id(display_mode) = 0;
-                id(main_display).update();
-              } else {
-                int tx = start_x, ty = start_y;
-                if (mode == 1) {
-                  int bw = 220, bh = 55, gap = 10;
-                  int sx = 10, sy = 50;
-                  for (int i = 0; i < GEONAME_COUNT; i++) {
-                    int col = i % 2;
-                    int row = i / 2;
-                    int x = sx + col * (bw + gap);
-                    int y = sy + row * (bh + gap);
-                    if (tx >= x && tx <= x + bw && ty >= y && ty <= y + bh) {
-                      id(geoname_id) = GEONAME_PRESETS[i];
-                      id(geoname_idx) = i;
-                      id(display_mode) = 0;
-                      id(get_jdate).execute();
-                      id(main_display).update();
-                      break;
-                    }
-                  }
-                  int cy = sy + 3 * (bh + gap) + 4;
-                  if (tx >= 10 && tx <= 230 && ty >= cy && ty <= cy + 36) {
-                    id(display_mode) = 3;
-                    id(main_display).update();
-                  }
-                  if (tx >= 250 && tx <= 470 && ty >= cy && ty <= cy + 36) {
-                    id(display_mode) = 0;
-                    id(main_display).update();
-                  }
-                } else if (mode == 3) {
-                  int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
-                  for (int i = 0; i < 12; i++) {
-                    int col = i % 3;
-                    int row = i / 3;
-                    int x = kx + col * (kw + gap);
-                    int y = ky + row * (kh + gap);
-                    if (tx >= x && tx <= x + kw && ty >= y && ty <= y + kh) {
-                      if (i == 9) {
-                        if (!id(geo_input).empty()) id(geo_input).pop_back();
-                      } else if (i == 11) {
-                        if (!id(geo_input).empty()) {
-                          int gid = atoi(id(geo_input).c_str());
-                          if (gid > 0) {
-                            id(geoname_id) = gid;
-                            id(geoname_idx) = -1;
-                            id(display_mode) = 0;
-                            id(get_jdate).execute();
-                          }
-                          id(geo_input) = "";
-                        }
-                      } else {
-                        const char *digits = "123456789";
-                        if (i < 9) {
-                          id(geo_input) += digits[i];
-                        } else {
-                          id(geo_input) += '0';
-                        }
+                if (swipe) {
+                  id(display_mode) = 0;
+                  id(main_display).update();
+                  ESP_LOGI("touch", "Swipe -> back to main");
+                } else {
+                  int tx = start_x, ty = start_y;
+                  if (mode == 1) {
+                    int bw = 220, bh = 55, gap = 10;
+                    int sx = 10, sy = 50;
+                    for (int i = 0; i < GEONAME_COUNT; i++) {
+                      int col = i % 2;
+                      int row = i / 2;
+                      int x = sx + col * (bw + gap);
+                      int y = sy + row * (bh + gap);
+                      if (tx >= x && tx <= x + bw && ty >= y && ty <= y + bh) {
+                        id(geoname_id) = GEONAME_PRESETS[i];
+                        id(geoname_idx) = i;
+                        id(display_mode) = 0;
+                        id(get_jdate).execute();
+                        id(main_display).update();
+                        break;
                       }
-                      id(main_display).update();
-                      break;
                     }
-                  }
-                  if (tx >= 10 && tx <= 470 && ty >= 288 && ty <= 320) {
-                    id(display_mode) = 0;
-                    id(main_display).update();
-                  }
-                } else if (mode == 2) {
-                  int tx2 = start_x, ty2 = start_y;
-                  if (tx2 >= 40 && tx2 <= 440 && ty2 >= 190 && ty2 <= 230) {
-                    id(display_mode) = 0;
-                    App.safe_reboot();
+                    int cy = sy + 3 * (bh + gap) + 4;
+                    if (tx >= 10 && tx <= 230 && ty >= cy && ty <= cy + 36) {
+                      id(display_mode) = 3;
+                      id(main_display).update();
+                    }
+                    if (tx >= 250 && tx <= 470 && ty >= cy && ty <= cy + 36) {
+                      id(display_mode) = 0;
+                      id(main_display).update();
+                    }
+                  } else if (mode == 3) {
+                    int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
+                    for (int i = 0; i < 12; i++) {
+                      int col = i % 3;
+                      int row = i / 3;
+                      int x = kx + col * (kw + gap);
+                      int y = ky + row * (kh + gap);
+                      if (tx >= x && tx <= x + kw && ty >= y && ty <= y + kh) {
+                        if (i == 9) {
+                          if (!id(geo_input).empty()) id(geo_input).pop_back();
+                        } else if (i == 11) {
+                          if (!id(geo_input).empty()) {
+                            int gid = atoi(id(geo_input).c_str());
+                            if (gid > 0) {
+                              id(geoname_id) = gid;
+                              id(geoname_idx) = -1;
+                              id(display_mode) = 0;
+                              id(get_jdate).execute();
+                            }
+                            id(geo_input) = "";
+                          }
+                        } else {
+                          const char *digits = "123456789";
+                          if (i < 9) {
+                            id(geo_input) += digits[i];
+                          } else {
+                            id(geo_input) += '0';
+                          }
+                        }
+                        id(main_display).update();
+                        break;
+                      }
+                    }
+                    if (tx >= 10 && tx <= 470 && ty >= 288 && ty <= 320) {
+                      id(display_mode) = 0;
+                      id(main_display).update();
+                    }
+                  } else if (mode == 2) {
+                    int tx2 = start_x, ty2 = start_y;
+                    if (tx2 >= 40 && tx2 <= 440 && ty2 >= 190 && ty2 <= 230) {
+                      id(display_mode) = 0;
+                      App.safe_reboot();
+                    }
                   }
                 }
               }
-            }
 
-            start_x = -1;
-            start_y = -1;
-            last_x = -1;
-            last_y = -1;
+              start_x = -1;
+              start_y = -1;
+              last_x = -1;
+              last_y = -1;
+            }
           }
