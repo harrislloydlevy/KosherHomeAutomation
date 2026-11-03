@@ -61,6 +61,7 @@ display:
               id(g_parasha_haftarah), id(g_daily_study),
               id(g_parasha_english), id(g_zmanim),
               id(g_upcoming), id(g_today_notes), id(g_shofar_status),
+              id(g_next_candles), id(g_next_havdalah),
               t.hour, t.minute);
         } else if (mode == 1) {
           render_location_screen(it, id(alef), id(alef_mid), id(mdi), id(background),

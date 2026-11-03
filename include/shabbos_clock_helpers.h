@@ -143,6 +143,15 @@ static bool matches_today(const char *date_str, int yr, int mo, int dy) {
   return false;
 }
 
+// Compute ESPTime day-of-week (1=Sun..7=Sat) from a Gregorian date.
+static int esp_dow_from_date(int y, int m, int d) {
+  int a = (14 - m) / 12;
+  int yy = y + 4800 - a;
+  int mm = m + 12 * a - 3;
+  int jdn = d + (153 * mm + 2) / 5 + 365 * yy + yy / 4 - yy / 100 + yy / 400 - 32045;
+  return (jdn % 7 + 1) % 7 + 1;
+}
+
 // Normalize an event title to its base (strip trailing year and roman numerals)
 // so that "Rosh Hashana 5787" and "Rosh Hashana II" both become "Rosh Hashana".
 static std::string event_base_title(const std::string &title) {
@@ -330,12 +339,15 @@ static void extract_display_data(
     std::string &upcoming,
     std::string &today_notes,
     std::string &shofar_status,
+    std::string &next_candles,
+    std::string &next_havdalah,
     std::string &footer) {
 
   const char *city      = JSON_GET(doc, ["location"]["city"]);
   const char *first_hd  = JSON_GET(doc, ["items"][0]["hdate"]);
 
   std::string candles_dt, havdalah_dt;
+  std::string next_candles_dt, next_havdalah_dt;
   std::string p_name, p_hebrew, p_torah, p_haftarah;
   std::string heb_today_hebrew;
   bool found_today = false;
@@ -357,12 +369,14 @@ static void extract_display_data(
       if (matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) {
         candles_dt = JSON_GET(obj, ["date"]);
       }
+      if (next_candles_dt.empty()) next_candles_dt = JSON_GET(obj, ["date"]);
 
     // Havdalah — only for today's date
     } else if (!strcmp(cat, "havdalah")) {
       if (matches_today(JSON_GET(obj, ["date"]), yr, mo, dy)) {
         havdalah_dt = JSON_GET(obj, ["date"]);
       }
+      if (next_havdalah_dt.empty()) next_havdalah_dt = JSON_GET(obj, ["date"]);
 
     // Parsha — capture the FIRST one in the 60-day range (current week's)
     } else if (!strcmp(cat, "parashat")) {
@@ -567,6 +581,33 @@ static void extract_display_data(
   havdalah_time = havdalah_dt.empty() ? "--:--" : fmt_time_12h(havdalah_dt.c_str());
   havdalah_icon = "\U000F059B";  // Material Design sunset icon
 
+  // ---- Next candle lighting (for next Shabbat/chag) ----
+  next_candles = "--:--";
+  if (!next_candles_dt.empty()) {
+    int ny = 0, nm = 0, nd = 0, nh = 0, nmi = 0;
+    if (sscanf(next_candles_dt.c_str(), "%d-%d-%dT%d:%d", &ny, &nm, &nd, &nh, &nmi) >= 5) {
+      char buf[48];
+      snprintf(buf, sizeof(buf), "%s %d %s  %s", dow_name(esp_dow_from_date(ny, nm, nd)),
+        nd, mon_short(nm), fmt_time_12h(next_candles_dt.c_str()).c_str());
+      next_candles = buf;
+    } else {
+      next_candles = fmt_time_12h(next_candles_dt.c_str());
+    }
+  }
+  // ---- Next havdalah ----
+  next_havdalah = "--:--";
+  if (!next_havdalah_dt.empty()) {
+    int ny = 0, nm = 0, nd = 0, nh = 0, nmi = 0;
+    if (sscanf(next_havdalah_dt.c_str(), "%d-%d-%dT%d:%d", &ny, &nm, &nd, &nh, &nmi) >= 5) {
+      char buf[48];
+      snprintf(buf, sizeof(buf), "%s %d %s  %s", dow_name(esp_dow_from_date(ny, nm, nd)),
+        nd, mon_short(nm), fmt_time_12h(next_havdalah_dt.c_str()).c_str());
+      next_havdalah = buf;
+    } else {
+      next_havdalah = fmt_time_12h(next_havdalah_dt.c_str());
+    }
+  }
+
   // ---- Format Hebrew date ----
   // Remove "of " prefix if present (e.g. "7th of Elul" -> "7th Elul")
   hebrew_date = rtl(heb_today_hebrew);
@@ -694,9 +735,12 @@ static void render_shabbos(
     const std::string &upcoming,
     const std::string &today_notes,
     const std::string &shofar_status,
+    const std::string &next_candles,
+    const std::string &next_havdalah,
     int cur_hour, int cur_minute) {
 
   auto c_wht   = Color(255, 255, 255);
+  auto c_gold  = Color(255, 200, 100);
   auto c_dim   = Color(130, 130, 130);
   auto c_div   = Color(50, 50, 40);
 
@@ -795,8 +839,18 @@ static void render_shabbos(
   }
 
   // ---- Right column: parsha, daily learning, upcoming ----
-  x = 194; y = my;
-  int col_w_r = 286;
+  x = 200; y = my;
+  int col_w_r = 276;
+  // Next candle lighting / havdalah
+  if (next_candles != "--:--") {
+    it.print(x, y, font_icons, c_gold, "\U000F17D3");
+    it.print(x + 24, y, font_small, c_wht, next_candles.c_str()); y += 16;
+  }
+  if (next_havdalah != "--:--") {
+    it.print(x, y, font_icons, c_gold, "\U000F059B");
+    it.print(x + 24, y, font_small, c_wht, next_havdalah.c_str()); y += 16;
+  }
+  if (next_candles != "--:--" || next_havdalah != "--:--") y += 4;
   // Book icon + English parsha name
   it.print(x, y, font_icons, c_wht, "\U000F1CCC");
   if (!parasha_english.empty()) { it.print(x + 22, y, font_small, c_wht, parasha_english.c_str()); y += 14; }
