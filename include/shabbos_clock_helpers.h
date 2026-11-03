@@ -928,7 +928,8 @@ static void render_location_screen(
   auto c_btn   = Color(40, 40, 80);
   auto c_sel   = Color(80, 80, 40);
 
-  if (bg_img) it.image(0, 0, bg_img);
+  (void)bg_img;
+  it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
 
   // Header
   it.filled_rectangle(0, 0, 480, 28, c_bg);
@@ -1033,7 +1034,8 @@ static void render_wifi_screen(
   auto c_btn   = Color(40, 40, 80);
   auto c_red   = Color(200, 50, 50);
 
-  if (bg_img) it.image(0, 0, bg_img);
+  (void)bg_img;
+  it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
 
   // Header
   it.filled_rectangle(0, 0, 480, 28, c_bg);
