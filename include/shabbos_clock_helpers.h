@@ -35,7 +35,7 @@ static std::string format_12h(int h, int m) {
   const char *ampm = (h >= 12) ? "PM" : "AM";
   int h12 = h % 12;
   if (h12 == 0) h12 = 12;
-  char buf[16];
+  char buf[32];
   snprintf(buf, sizeof(buf), "%d:%02d %s", h12, m, ampm);
   return std::string(buf);
 }
