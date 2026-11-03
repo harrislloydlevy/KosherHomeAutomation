@@ -198,7 +198,19 @@ touchscreen:
                   }
                 }
                 if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
-                  id(display_mode) = 0;
+                  // Save button
+                  if (!id(geo_input).empty()) {
+                    int gid = atoi(id(geo_input).c_str());
+                    if (gid > 0) {
+                      id(geoname_id) = gid;
+                      id(geoname_idx) = -1;
+                      id(display_mode) = 0;
+                      id(get_jdate).execute();
+                    }
+                    id(geo_input) = "";
+                  } else {
+                    id(display_mode) = 0;
+                  }
                   id(need_display_update) = true;
                 }
               } else if (mode == 2) {

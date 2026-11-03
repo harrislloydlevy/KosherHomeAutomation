@@ -964,17 +964,15 @@ static void render_location_screen(
     it.print(360, cy + 8, font_small, c_wht, TextAlign::CENTER, "Back");
   } else {
     // Custom ID entry with keypad
-    it.print(10, 36, font_mid, c_gold, "Current ID:");
-    char id_buf[32];
-    snprintf(id_buf, sizeof(id_buf), "%d", geoname_id);
-    it.print(10, 60, font_mid, c_wht, id_buf);
+    char id_buf[64];
+    snprintf(id_buf, sizeof(id_buf), "Current ID: %d", geoname_id);
+    it.print(10, 36, font_mid, c_wht, id_buf);
 
     it.filled_rectangle(10, 90, 460, 36, c_btn);
     std::string display_str = input.empty() ? "Enter ID..." : input;
     it.print(16, 96, font_mid, c_wht, display_str.c_str());
 
-    it.print(10, 136, font_small, c_dim, "Lookup your city's GeoName ID at:");
-    it.print(10, 152, font_small, c_gold, "hebcal.com/geo");
+    it.print(10, 136, font_small, c_dim, "Find your city's GeoName ID at hebcal.com/geo");
 
     int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
     const char *keys[] = {
@@ -1004,8 +1002,14 @@ static void render_location_screen(
 
   // Footer
   it.filled_rectangle(0, 287, 480, 1, c_dim);
-  it.filled_rectangle(0, 288, 480, 32, c_bg);
-  it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe to return");
+  if (custom_mode) {
+    it.filled_rectangle(40, 288, 400, 32, c_btn);
+    it.rectangle(40, 288, 400, 32, c_dim);
+    it.print(240, 295, font_mid, c_wht, TextAlign::CENTER, "Save");
+  } else {
+    it.filled_rectangle(0, 288, 480, 32, c_bg);
+    it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Tap a city or Back");
+  }
 }
 
 // ============================================================================
