@@ -94,9 +94,21 @@ globals:
   - id: g_shofar_status
     type: std::string
     initial_value: '""'
+  - id: g_next_candles
+    type: std::string
+    initial_value: '""'
+  - id: g_next_havdalah
+    type: std::string
+    initial_value: '""'
   - id: g_footer
     type: std::string
     initial_value: '""'
+
+  # Deferred display update flag (touch handlers set this; interval performs the update)
+  - id: need_display_update
+    type: bool
+    initial_value: 'false'
+    restore_value: false
 
   # User settings
   - id: geoname_id
@@ -171,7 +183,8 @@ script:
                                 id(g_parasha_haftarah), id(g_daily_study),
                                 id(g_parasha_english), id(g_zmanim),
                                 id(g_upcoming), id(g_today_notes),
-                                id(g_shofar_status), id(g_footer));
+                                id(g_shofar_status), id(g_next_candles), id(g_next_havdalah),
+                                id(g_footer));
                         - script.execute: get_zmanim
                     else:
                         - logger.log:
@@ -211,11 +224,12 @@ script:
                               id(g_parasha_haftarah), id(g_daily_study),
                               id(g_parasha_english), id(g_zmanim),
                               id(g_upcoming), id(g_today_notes),
-                              id(g_shofar_status), id(g_footer));
+                              id(g_shofar_status), id(g_next_candles), id(g_next_havdalah),
+                              id(g_footer));
                           id(data_ready) = true;
                           ESP_LOGI("shabbos", "data_ready set true");
                       - lambda: |-
-                          id(main_display).update();
+                          id(need_display_update) = true;
 
   - id: set_location
     mode: restart
@@ -280,6 +294,13 @@ interval:
   - interval: 2h
     then:
       - script.execute: get_jdate
+  - interval: 100ms
+    then:
+      - lambda: |-
+          if (id(need_display_update)) {
+            id(need_display_update) = false;
+            id(main_display).update();
+          }
 
 font:
   - file: "gfonts://Noto Sans Hebrew"

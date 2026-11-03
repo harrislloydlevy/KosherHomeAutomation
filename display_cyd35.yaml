@@ -119,7 +119,7 @@ touchscreen:
                   id(display_mode) = 2;
                   ESP_LOGI("touch", "Tap right -> WiFi");
                 }
-                id(main_display).update();
+                id(need_display_update) = true;
               } else if (mode == 1) {
                 int bw = 220, bh = 55, gap = 10;
                 int sx = 10, sy = 50;
@@ -133,23 +133,23 @@ touchscreen:
                     id(geoname_idx) = i;
                     id(display_mode) = 0;
                     id(get_jdate).execute();
-                    id(main_display).update();
+                    id(need_display_update) = true;
                     break;
                   }
                 }
                 int cy = sy + 3 * (bh + gap) + 4;
                 if (tx >= 10 && tx <= 230 && ty >= cy && ty <= cy + 36) {
                   id(display_mode) = 3;
-                  id(main_display).update();
+                  id(need_display_update) = true;
                 }
                 if (tx >= 250 && tx <= 470 && ty >= cy && ty <= cy + 36) {
                   id(display_mode) = 0;
-                  id(main_display).update();
+                  id(need_display_update) = true;
                 }
                 // tap anywhere in footer to go back
                 if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
                   id(display_mode) = 0;
-                  id(main_display).update();
+                  id(need_display_update) = true;
                 }
               } else if (mode == 3) {
                 int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
@@ -180,13 +180,13 @@ touchscreen:
                         id(geo_input) += '0';
                       }
                     }
-                    id(main_display).update();
+                    id(need_display_update) = true;
                     break;
                   }
                 }
                 if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
                   id(display_mode) = 0;
-                  id(main_display).update();
+                  id(need_display_update) = true;
                 }
               } else if (mode == 2) {
                 if (tx >= 40 && tx <= 440 && ty >= 190 && ty <= 230) {
@@ -195,7 +195,7 @@ touchscreen:
                 }
                 if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
                   id(display_mode) = 0;
-                  id(main_display).update();
+                  id(need_display_update) = true;
                 }
               }
 
