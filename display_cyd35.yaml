@@ -105,16 +105,18 @@ touchscreen:
           static int last_x = -1, last_y = -1;
           int mode = id(display_mode);
 
-          if (!touches.empty()) {
+          // Detect release: touch state has STATE_RELEASING (0x04) bit or is STATE_RELEASED (0x00)
+          bool releasing = (touch.state == 0) || (touch.state & 0x04);
+          if (!releasing) {
             if (start_x < 0) {
-              start_x = touches[0].x;
-              start_y = touches[0].y;
-              last_x = touches[0].x;
-              last_y = touches[0].y;
-              ESP_LOGI("touch", "DOWN x=%d y=%d", touches[0].x, touches[0].y);
+              start_x = touch.x;
+              start_y = touch.y;
+              last_x = touch.x;
+              last_y = touch.y;
+              ESP_LOGI("touch", "DOWN x=%d y=%d state=%d", touch.x, touch.y, touch.state);
             } else {
-              last_x = touches[0].x;
-              last_y = touches[0].y;
+              last_x = touch.x;
+              last_y = touch.y;
             }
           } else {
             if (start_x >= 0) {
