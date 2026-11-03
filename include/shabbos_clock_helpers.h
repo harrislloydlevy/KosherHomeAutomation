@@ -278,7 +278,6 @@ static std::string build_zmanim_string(const JsonDocument &doc) {
   add("Tefilla",  JSON_GET(doc, ["times"]["sofZmanTfilla"]));
   add("Chatzot",  JSON_GET(doc, ["times"]["chatzot"]));
   add("MinchaG",  mg);
-  add("MinchaK",  JSON_GET(doc, ["times"]["minchaKetana"]));
   add("Plag",     plag);
   // Maariv = sunset + 50 min (standard ashkenazi practice)
   std::string maariv_s = "--:--";
@@ -296,6 +295,7 @@ static std::string build_zmanim_string(const JsonDocument &doc) {
   }
   add("Sunset",   sun);
   add("Tzais",    JSON_GET(doc, ["times"]["tzeit85deg"]));
+  add("Midnight", JSON_GET(doc, ["times"]["chatzotNight"]));
 
   return out;
 }
@@ -778,7 +778,7 @@ static void render_shabbos(
       }
       bool zpassed = (zh * 60 + zm) <= (cur_hour * 60 + cur_minute) && zh >= 0 && zampm[0] != '\0';
       auto zcol = zpassed ? c_dim : c_wht;
-      it.print(x, y, font_small, zcol, line.c_str()); y += 13;
+      it.print(x, y, font_small, zcol, line.c_str()); y += 15;
       if (nl == zmanim.npos) break;
       pos = nl + 1;
     }
