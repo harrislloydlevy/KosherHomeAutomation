@@ -922,8 +922,7 @@ static void render_location_screen(
     bool custom_mode,
     bool wifi_connected,
     const std::string &wifi_ssid,
-    float signal_dbm,
-    TQr *ap_qr) {
+    float signal_dbm) {
 
   auto c_bg    = Color(0, 0, 0);
   auto c_gold  = Color(255, 200, 100);
@@ -931,6 +930,7 @@ static void render_location_screen(
   auto c_dim   = Color(160, 160, 160);
   auto c_btn   = Color(40, 40, 80);
   auto c_sel   = Color(80, 80, 40);
+  auto c_red   = Color(200, 50, 50);
 
   (void)bg_img;
   it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
@@ -948,9 +948,6 @@ static void render_location_screen(
       it.print(10, 30, font_small, c_st, wbuf);
     } else {
       it.print(10, 30, font_small, c_st, "WiFi: AP mode - scan QR to connect");
-      // QR code for AP mode (small, top-right to avoid preset overlap)
-      it.print(440, 30, font_small, c_dim, TextAlign::CENTER, "Scan");
-      it.qr_code(425, 44, ap_qr, c_wht, 1);
     }
   }
 
