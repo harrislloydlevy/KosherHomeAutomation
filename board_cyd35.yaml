@@ -13,6 +13,8 @@
 packages:
   display: !include ./display_cyd35.yaml
 
+psram:
+
 esp32:
   board: esp32dev
   framework:
