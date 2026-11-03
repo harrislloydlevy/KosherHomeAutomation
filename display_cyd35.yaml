@@ -52,7 +52,7 @@ display:
           // Main Shabbos clock — draws from pre-computed g_ globals.
           // No JSON parsing happens during render; all data was extracted
           // by extract_display_data() after the last fetch.
-          render_shabbos(it, id(alef), id(alef_mid), id(alef_hdr), id(mdi), ${enable_background} ? id(background) : nullptr,
+          render_shabbos(it, id(alef), id(alef_mid), id(alef_hdr), id(mdi),
               id(g_hdr),
               id(g_candles_time), id(g_candles_icon),
               id(g_havdalah_time), id(g_havdalah_icon),

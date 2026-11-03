@@ -2,9 +2,7 @@
 substitutions:
   name: standalone-shabbosclock
   friendly_name: "Standalone Shabbos Clock"
-  # Build-time toggle for the background image. Set to "false" to disable
-  # the image (solid black background) for flicker/flash testing.
-  enable_background: "true"
+
   api_key: !secret api_key
   ota_password: !secret ota_password
   ap_password: !secret ap_password
