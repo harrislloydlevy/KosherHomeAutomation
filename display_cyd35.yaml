@@ -52,7 +52,7 @@ display:
           // Main Shabbos clock — draws from pre-computed g_ globals.
           // No JSON parsing happens during render; all data was extracted
           // by extract_display_data() after the last fetch.
-          render_shabbos(it, id(alef), id(alef_mid), id(alef_hdr), id(mdi), id(background),
+          render_shabbos(it, id(alef), id(alef_mid), id(alef_hdr), id(mdi), ${enable_background} ? id(background) : nullptr,
               id(g_hdr),
               id(g_candles_time), id(g_candles_icon),
               id(g_havdalah_time), id(g_havdalah_icon),
@@ -90,7 +90,7 @@ touchscreen:
     spi_id: spi_bus
     cs_pin: GPIO33
     display: main_display
-    threshold: 50
+    threshold: 10
     calibration:
       x_min: 712
       x_max: 3506

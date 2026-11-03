@@ -745,8 +745,9 @@ static void render_shabbos(
   auto c_div   = Color(50, 50, 40);
 
   if (!font_small || !font_mid || !font_icons) return;
-  // Background: solid color (image disabled for flicker testing)
-  it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
+  // Background image (drawn only if provided; pass nullptr to disable for flicker testing)
+  if (bg_img) it.image(0, 0, bg_img);
+  else it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
 
   // ---- Header bar (full width, 28px) ----
   auto c_dark = Color(0, 0, 0);
