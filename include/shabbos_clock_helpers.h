@@ -750,10 +750,10 @@ static void render_shabbos(
 
   // ---- Header bar (full width, 28px) ----
   auto c_dark = Color(0, 0, 0);
-  it.print(240, 6, font_hdr, c_dark, TextAlign::CENTER, hdr.c_str());
+  it.print(240, 8, font_hdr, c_dark, TextAlign::CENTER, hdr.c_str());
   // Current wall-clock time (top-right of header)
   std::string now_s = format_12h(cur_hour, cur_minute);
-  it.print(472, 6, font_hdr, c_dark, TextAlign::RIGHT, now_s.c_str());
+  it.print(472, 8, font_hdr, c_dark, TextAlign::RIGHT, now_s.c_str());
 
   // ---- Vertical divider between left/right columns ----
   it.filled_rectangle(190, 28, 1, 260, c_div);
@@ -764,8 +764,6 @@ static void render_shabbos(
   int x = mx, y = my;
   // Hebrew date (large, right-aligned)
   it.print(x + 190 - mx - 4, y, font_mid, c_wht, TextAlign::RIGHT, hebrew_date.c_str()); y += 20;
-  // English date
-  it.print(x, y, font_small, c_wht, english_date.c_str()); y += 14;
   // Today notes (Omer, Selichot — gold)
   if (!today_notes.empty()) {
     std::string::size_type pos = 0;
