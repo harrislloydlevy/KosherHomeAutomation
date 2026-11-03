@@ -50,6 +50,10 @@ globals:
     type: bool
     initial_value: 'false'
     restore_value: false
+  - id: button_press_time
+    type: uint32_t
+    initial_value: '0'
+    restore_value: false
 
   # Pre-computed display strings — populated by extract_display_data()
   # after each fetch, read by render_shabbos() during display update.

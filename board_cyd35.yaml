@@ -40,22 +40,20 @@ binary_sensor:
         input: true
         pullup: true
     on_press:
-      - lambda: 'ESP_LOGI("nav", "Boot button PRESSED");'
-    on_click:
-      - min_length: 0ms
-        max_length: 1000ms
-        then:
-          - lambda: |-
-              id(show_qr) = !id(show_qr);
-              id(need_display_update) = true;
-              ESP_LOGI("nav", "Boot button short -> show_qr=%d", id(show_qr));
-      - min_length: 1000ms
-        max_length: 5000ms
-        then:
-          - lambda: |-
-              ESP_LOGI("nav", "Boot button long -> clear WiFi + reboot (AP mode)");
-              wifi::global_wifi_component->clear_sta();
-              wifi::global_wifi_component->save_wifi_sta("", "");
-              App.safe_reboot();
+      - lambda: |-
+          id(button_press_time) = millis();
+          ESP_LOGI("nav", "Boot button PRESSED at %u", id(button_press_time));
     on_release:
-      - lambda: 'ESP_LOGI("nav", "Boot button RELEASED");'
+      - lambda: |-
+          uint32_t duration = millis() - id(button_press_time);
+          ESP_LOGI("nav", "Boot button RELEASED after %u ms", duration);
+          if (duration < 1000) {
+            id(show_qr) = !id(show_qr);
+            id(need_display_update) = true;
+            ESP_LOGI("nav", "Short press -> show_qr=%d", id(show_qr));
+          } else {
+            ESP_LOGI("nav", "Long press -> clear WiFi + reboot (AP mode)");
+            wifi::global_wifi_component->clear_sta();
+            wifi::global_wifi_component->save_wifi_sta("", "");
+            App.safe_reboot();
+          }
