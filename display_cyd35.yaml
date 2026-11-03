@@ -106,17 +106,24 @@ touchscreen:
           int mode = id(display_mode);
 
           // Detect release: touch state has STATE_RELEASING (0x04) bit or is STATE_RELEASED (0x00)
-          bool releasing = (touch.state == 0) || (touch.state & 0x04);
+          // touches may be empty on a pure release event, so guard access.
+          int cx = -1, cy = -1, cstate = 0;
+          if (!touches.empty()) {
+            cx = touches[0].x;
+            cy = touches[0].y;
+            cstate = touches[0].state;
+          }
+          bool releasing = touches.empty() || (cstate == 0) || (cstate & 0x04);
           if (!releasing) {
             if (start_x < 0) {
-              start_x = touch.x;
-              start_y = touch.y;
-              last_x = touch.x;
-              last_y = touch.y;
-              ESP_LOGI("touch", "DOWN x=%d y=%d state=%d", touch.x, touch.y, touch.state);
+              start_x = cx;
+              start_y = cy;
+              last_x = cx;
+              last_y = cy;
+              ESP_LOGI("touch", "DOWN x=%d y=%d state=%d", cx, cy, cstate);
             } else {
-              last_x = touch.x;
-              last_y = touch.y;
+              last_x = cx;
+              last_y = cy;
             }
           } else {
             if (start_x >= 0) {
