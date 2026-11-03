@@ -904,7 +904,7 @@ static void render_shabbos(
   }
 
   // ---- Footer bar (full width, 32px) ----
-  it.print(240, 295, font_hdr, c_dark, TextAlign::CENTER, "Swipe Left to set location, Swipe Right to setup Wifi");
+  it.print(240, 295, font_hdr, c_dark, TextAlign::CENTER, "Tap bottom-left: Location, bottom-right: WiFi");
 }
 
 // ============================================================================
