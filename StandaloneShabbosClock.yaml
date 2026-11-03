@@ -17,6 +17,7 @@ esphome:
   on_boot:
     - priority: -100
       then:
+        - lambda: 'id(geoname_number).publish_state(id(geoname_id));'
         - logger.log: "Booted — fetching HebCal data"
         - script.execute: get_jdate
 
@@ -24,6 +25,9 @@ packages:
   board: !include ./board_cyd35.yaml
 
 http_request:
+
+web_server:
+  port: 80
 
 # ============================================================================
 # Globals
@@ -39,6 +43,10 @@ globals:
   # Display shows "Loading..." until true. Stays true forever after;
   # refetches silently update the g_ globals without flicker.
   - id: data_ready
+    type: bool
+    initial_value: 'false'
+    restore_value: false
+  - id: show_qr
     type: bool
     initial_value: 'false'
     restore_value: false
@@ -110,6 +118,10 @@ globals:
     type: bool
     initial_value: 'false'
     restore_value: false
+  - id: setup_custom
+    type: bool
+    initial_value: 'false'
+    restore_value: false
   - id: touch_sx
     type: int
     initial_value: '-1'
@@ -139,6 +151,9 @@ globals:
 
 qr_code:
   - id: ap_qr
+    value: "http://192.168.4.1/"
+    ecc: LOW
+  - id: setup_qr
     value: "http://192.168.4.1/"
     ecc: LOW
 
@@ -275,6 +290,22 @@ wifi:
 captive_portal:
 
 safe_mode:
+
+number:
+  - platform: template
+    name: "GeoName ID"
+    id: geoname_number
+    min_value: 1
+    max_value: 9999999
+    step: 1
+    optimistic: true
+    initial_value: 2147714
+    restore_value: true
+    mode: BOX
+    on_value:
+      - lambda: |-
+          id(geoname_id) = (int)x;
+          id(get_jdate).execute();
 
 # ============================================================================
 # Time: SNTP only — no on_time triggers.

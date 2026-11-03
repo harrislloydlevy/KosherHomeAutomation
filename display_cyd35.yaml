@@ -38,38 +38,38 @@ display:
 
     lambda: |-
         // If data hasn't been fetched yet, show a loading screen.
-        // After first successful fetch, data_ready stays true forever
-        // and refetches silently update the globals without flicker.
         if (!id(data_ready)) {
           it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
           it.print(240, 160, id(alef), Color(255, 255, 255), TextAlign::CENTER, "Loading...");
           return;
         }
 
-        int mode = id(display_mode);
-        if (mode == 0) {
-          auto t = id(sntp_time).now();
-          // Main Shabbos clock — draws from pre-computed g_ globals.
-          // No JSON parsing happens during render; all data was extracted
-          // by extract_display_data() after the last fetch.
-          render_shabbos(it, id(alef), id(alef_mid), id(alef_hdr), id(mdi),
-              id(g_hdr),
-              id(g_candles_time), id(g_candles_icon),
-              id(g_havdalah_time), id(g_havdalah_icon),
-              id(g_hebrew_date), id(g_english_date),
-              id(g_parasha_hebrew), id(g_parasha_torah),
-              id(g_parasha_haftarah), id(g_daily_study),
-              id(g_parasha_english), id(g_zmanim),
-              id(g_upcoming), id(g_today_notes), id(g_shofar_status),
-              id(g_next_candles), id(g_next_havdalah),
-              t.hour, t.minute);
-        } else if (mode == 1) {
+        auto t = id(sntp_time).now();
+        // Main Shabbos clock — draws from pre-computed g_ globals.
+        render_shabbos(it, id(alef), id(alef_mid), id(alef_hdr), id(mdi),
+            id(g_hdr),
+            id(g_candles_time), id(g_candles_icon),
+            id(g_havdalah_time), id(g_havdalah_icon),
+            id(g_hebrew_date), id(g_english_date),
+            id(g_parasha_hebrew), id(g_parasha_torah),
+            id(g_parasha_haftarah), id(g_daily_study),
+            id(g_parasha_english), id(g_zmanim),
+            id(g_upcoming), id(g_today_notes), id(g_shofar_status),
+            id(g_next_candles), id(g_next_havdalah),
+            t.hour, t.minute);
+
+        // QR code overlay for web-based setup
+        if (id(show_qr)) {
+          it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
+          it.print(240, 40, id(alef_mid), Color(255, 255, 255), TextAlign::CENTER, "Setup via web:");
           bool wifi_ok = wifi::global_wifi_component ? wifi::global_wifi_component->is_connected() : false;
-          std::string ssid = wifi_ok ? id(wifi_ssid_sensor).get_state() : "";
-          float sig = id(wifi_signal_db).get_state();
-          render_location_screen(it, id(alef), id(alef_mid), id(mdi), id(background),
-              id(geoname_id), id(geo_input), id(setup_custom),
-              wifi_ok, ssid, sig, id(ap_qr));
+          if (wifi_ok) {
+            it.print(240, 70, id(alef), Color(255, 255, 255), TextAlign::CENTER, "http://standalone-shabbosclock.local/");
+          } else {
+            it.print(240, 70, id(alef), Color(255, 255, 255), TextAlign::CENTER, "http://192.168.4.1/");
+            it.qr_code(160, 90, id(setup_qr), Color(255, 255, 255), 3);
+          }
+          it.print(240, 260, id(alef), Color(160, 160, 160), TextAlign::CENTER, "Press boot button to close");
         }
 
 # ============================================================================
@@ -79,142 +79,19 @@ display:
 # rotation. This means physical horizontal swipes produce touch Y changes,
 # and physical vertical swipes produce touch X changes. The swipe detection
 # below checks dy (not dx) for horizontal movement accordingly.
-touchscreen:
-  - id: main_touchscreen
-    platform: xpt2046
-    spi_id: spi_bus
-    cs_pin: GPIO33
-    display: main_display
-    threshold: 20
-    calibration:
-      x_min: 712
-      x_max: 3506
-      y_min: 851
-      y_max: 3420
-    transform:
-      swap_xy: true
-      mirror_x: true
-      mirror_y: true
-    on_update:
-      - lambda: |-
-          static int start_x = -1, start_y = -1;
-          int mode = id(display_mode);
-
-          if (touches.empty()) {
-            if (start_x >= 0) {
-              int tx = start_x, ty = start_y;
-              ESP_LOGI("touch", "RELEASE x=%d y=%d mode=%d", tx, ty, mode);
-
-              if (mode == 0) {
-                if (tx < 240) {
-                  id(display_mode) = 1;
-                } else {
-                  id(display_mode) = 2;
-                }
-                id(need_display_update) = true;
-              } else if (mode == 1) {
-                if (!id(setup_custom)) {
-                  int bw = 220, bh = 55, gap = 10;
-                  int sx = 10, sy = 50;
-                  for (int i = 0; i < GEONAME_COUNT; i++) {
-                    int col = i % 2;
-                    int row = i / 2;
-                    int x = sx + col * (bw + gap);
-                    int y = sy + row * (bh + gap);
-                    if (tx >= x && tx <= x + bw && ty >= y && ty <= y + bh) {
-                      id(geoname_id) = GEONAME_PRESETS[i];
-                      id(geoname_idx) = i;
-                      id(display_mode) = 0;
-                      id(get_jdate).execute();
-                      id(need_display_update) = true;
-                      break;
-                    }
-                  }
-                  int cy = sy + 3 * (bh + gap) + 4;
-                  if (tx >= 10 && tx <= 230 && ty >= cy && ty <= cy + 36) {
-                    id(setup_custom) = true;
-                    id(need_display_update) = true;
-                  }
-                  if (tx >= 250 && tx <= 470 && ty >= cy && ty <= cy + 36) {
-                    id(display_mode) = 0;
-                    id(need_display_update) = true;
-                  }
-                  if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
-                    id(display_mode) = 0;
-                    id(need_display_update) = true;
-                  }
-                } else {
-                  int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
-                  for (int i = 0; i < 12; i++) {
-                    int col = i % 3;
-                    int row = i / 3;
-                    int x = kx + col * (kw + gap);
-                    int y = ky + row * (kh + gap);
-                    if (tx >= x && tx <= x + kw && ty >= y && ty <= y + kh) {
-                      if (i == 9) {
-                        if (!id(geo_input).empty()) id(geo_input).pop_back();
-                      } else if (i == 11) {
-                        if (!id(geo_input).empty()) {
-                          int gid = atoi(id(geo_input).c_str());
-                          if (gid > 0) {
-                            id(geoname_id) = gid;
-                            id(geoname_idx) = -1;
-                            id(display_mode) = 0;
-                            id(get_jdate).execute();
-                          }
-                          id(geo_input) = "";
-                        }
-                      } else {
-                        const char *digits = "123456789";
-                        if (i < 9) {
-                          id(geo_input) += digits[i];
-                        } else {
-                          id(geo_input) += '0';
-                        }
-                      }
-                      id(need_display_update) = true;
-                      break;
-                    }
-                  }
-                  if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
-                    if (!id(geo_input).empty()) {
-                      int gid = atoi(id(geo_input).c_str());
-                      if (gid > 0) {
-                        id(geoname_id) = gid;
-                        id(geoname_idx) = -1;
-                        id(display_mode) = 0;
-                        id(get_jdate).execute();
-                      }
-                      id(geo_input) = "";
-                    } else {
-                      id(display_mode) = 0;
-                    }
-                    id(need_display_update) = true;
-                  }
-                }
-              } else if (mode == 2) {
-                if (tx >= 40 && tx <= 440 && ty >= 190 && ty <= 230) {
-                  ESP_LOGI("wifi", "Clearing WiFi credentials and rebooting");
-                  wifi::global_wifi_component->clear_sta();
-                  wifi::global_wifi_component->save_wifi_sta("", "");
-                  id(display_mode) = 0;
-                  App.safe_reboot();
-                }
-                if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
-                  id(display_mode) = 0;
-                  id(need_display_update) = true;
-                }
-              }
-
-              start_x = -1;
-              start_y = -1;
-            }
-          } else {
-            if (start_x < 0) {
-              if (!touches.empty()) {
-                start_x = touches[0].x;
-                start_y = touches[0].y;
-                ESP_LOGI("touch", "DOWN x=%d y=%d", touches[0].x, touches[0].y);
-              }
-            }
-          }
+# Touchscreen disabled - setup is via web interface (QR code)
+# touchscreen:
+#   - id: main_touchscreen
+#     platform: xpt2046
+#     spi_id: spi_bus
+#     cs_pin: GPIO33
+#     display: main_display
+#     threshold: 20
+#     calibration:
+#       x_min: 712
+#       x_max: 3506
+#       y_min: 851
+#       y_max: 3420
+#     transform:
+#       swap_xy: true
+#       mirror_x: true

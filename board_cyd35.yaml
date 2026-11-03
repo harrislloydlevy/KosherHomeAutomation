@@ -39,8 +39,19 @@ binary_sensor:
       mode:
         input: true
         pullup: true
-    on_press:
-      - lambda: |-
-          id(display_mode) = (id(display_mode) + 1) % 3;
-          ESP_LOGI("nav", "Boot button -> mode %d", id(display_mode));
-          id(need_display_update) = true;
+    on_click:
+      - min_length: 0ms
+        max_length: 1000ms
+        then:
+          - lambda: |-
+              id(show_qr) = !id(show_qr);
+              id(need_display_update) = true;
+              ESP_LOGI("nav", "Boot button short -> show_qr=%d", id(show_qr));
+      - min_length: 1000ms
+        max_length: 5000ms
+        then:
+          - lambda: |-
+              ESP_LOGI("nav", "Boot button long -> clear WiFi + reboot (AP mode)");
+              wifi::global_wifi_component->clear_sta();
+              wifi::global_wifi_component->save_wifi_sta("", "");
+              App.safe_reboot();
