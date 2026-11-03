@@ -17,6 +17,8 @@ esp32:
   board: esp32dev
   framework:
     type: arduino
+    sdkconfig_options:
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "10"
 
 spi:
   - id: spi_bus
