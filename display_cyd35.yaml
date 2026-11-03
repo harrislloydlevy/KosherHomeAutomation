@@ -112,16 +112,14 @@ touchscreen:
 
               if (mode == 0) {
                 // Bottom of screen: left -> location, right -> wifi
-                if (ty >= 200) {
-                  if (tx < 240) {
-                    id(display_mode) = 1;
-                    ESP_LOGI("touch", "Tap bottom-left -> Location");
-                  } else {
-                    id(display_mode) = 2;
-                    ESP_LOGI("touch", "Tap bottom-right -> WiFi");
-                  }
-                  id(main_display).update();
+                if (tx < 240) {
+                  id(display_mode) = 1;
+                  ESP_LOGI("touch", "Tap left -> Location");
+                } else {
+                  id(display_mode) = 2;
+                  ESP_LOGI("touch", "Tap right -> WiFi");
                 }
+                id(main_display).update();
               } else if (mode == 1) {
                 int bw = 220, bh = 55, gap = 10;
                 int sx = 10, sy = 50;
