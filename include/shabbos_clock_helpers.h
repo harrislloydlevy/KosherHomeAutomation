@@ -1057,20 +1057,20 @@ static void render_wifi_screen(
       snprintf(db_buf, sizeof(db_buf), "Signal: %.0f dBm", signal_dbm);
     }
     it.print(10, 80, font_small, c_wht, db_buf);
+
+    // Connect to new WiFi button
+    it.filled_rectangle(40, 190, 400, 40, c_btn);
+    it.rectangle(40, 190, 400, 40, c_dim);
+    it.print(240, 200, font_mid, c_wht, TextAlign::CENTER, "Connect to new WiFi");
   } else {
     it.print(10, 60, font_small, c_dim, "Connect via AP at 192.168.4.1");
+    // QR Code - connect to captive portal (only in AP mode)
+    it.print(240, 44, font_small, c_dim, TextAlign::CENTER, "Scan to connect");
+    it.qr_code(160, 60, ap_qr, c_wht, 3);
   }
-
-  // QR Code - connect to captive portal
-  it.print(240, 44, font_small, c_dim, TextAlign::CENTER, "Scan to connect");
-  it.qr_code(160, 60, ap_qr, c_wht, 3);
-
-  // Reset WiFi button
-  it.filled_rectangle(40, 190, 400, 40, c_red);
-  it.print(240, 200, font_mid, c_wht, TextAlign::CENTER, "RESET WiFi & Reconfigure");
 
   // Footer
   it.filled_rectangle(0, 287, 480, 1, c_dim);
   it.filled_rectangle(0, 288, 480, 32, c_bg);
-  it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Left to return");
+  it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Tap footer to return");
 }

@@ -213,6 +213,9 @@ touchscreen:
                 }
               } else if (mode == 2) {
                 if (tx >= 40 && tx <= 440 && ty >= 190 && ty <= 230) {
+                  ESP_LOGI("wifi", "Clearing WiFi credentials and rebooting");
+                  wifi::global_wifi_component->clear_sta();
+                  wifi::global_wifi_component->save_wifi_sta("", "");
                   id(display_mode) = 0;
                   App.safe_reboot();
                 }
