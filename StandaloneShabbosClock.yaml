@@ -109,6 +109,14 @@ globals:
     type: bool
     initial_value: 'false'
     restore_value: false
+  - id: touch_sx
+    type: int
+    initial_value: '-1'
+    restore_value: false
+  - id: touch_sy
+    type: int
+    initial_value: '-1'
+    restore_value: false
 
   # User settings
   - id: geoname_id
