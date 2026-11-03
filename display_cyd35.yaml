@@ -99,6 +99,7 @@ touchscreen:
     transform:
       swap_xy: true
       mirror_x: true
+      mirror_y: true
     on_update:
       - lambda: |-
           static int start_x = -1, start_y = -1;
