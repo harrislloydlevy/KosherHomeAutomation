@@ -64,7 +64,10 @@ display:
               t.hour, t.minute);
         } else if (mode == 1) {
           render_location_screen(it, id(alef), id(alef_mid), id(mdi), id(background),
-              id(geoname_id), id(geo_input));
+              id(geoname_id), id(geo_input), false);
+        } else if (mode == 3) {
+          render_location_screen(it, id(alef), id(alef_mid), id(mdi), id(background),
+              id(geoname_id), id(geo_input), true);
         } else if (mode == 2) {
           bool wifi_ok = wifi::global_wifi_component ? wifi::global_wifi_component->is_connected() : false;
           std::string ssid = wifi_ok ? id(wifi_ssid_sensor).get_state() : "";
@@ -98,67 +101,118 @@ touchscreen:
     on_touch:
       - lambda: |-
           static int start_x = -1, start_y = -1;
+          static int last_x = -1, last_y = -1;
           int mode = id(display_mode);
           if (touch.state) {
             if (start_x < 0) {
               start_x = touch.x;
               start_y = touch.y;
+              last_x = touch.x;
+              last_y = touch.y;
+            } else {
+              if (touch.x > 0 || touch.y > 0) {
+                last_x = touch.x;
+                last_y = touch.y;
+              }
             }
           } else if (start_x >= 0) {
-            int dx = touch.x - start_x;
-            int dy = touch.y - start_y;
+            int ex = (last_x >= 0) ? last_x : start_x;
+            int ey = (last_y >= 0) ? last_y : start_y;
+            int dx = ex - start_x;
+            int dy = ey - start_y;
             int dist = abs(dx) + abs(dy);
-            // swap_xy is on: physical horizontal → touch Y, physical vertical → touch X
-            if (dist > 50 && abs(dy) > abs(dx)) {
-              if (dy > 0) {
-                id(display_mode) = 2;
+            bool swipe = (dist > 50 && abs(dy) > abs(dx));
+
+            if (mode == 0) {
+              if (swipe) {
+                if (dy > 0) {
+                  id(display_mode) = 2;
+                } else {
+                  id(display_mode) = 1;
+                }
+                id(main_display).update();
+              }
+            } else {
+              if (swipe) {
+                id(display_mode) = 0;
                 id(main_display).update();
               } else {
-                id(display_mode) = 1;
-                id(main_display).update();
-              }
-            } else if (mode == 1) {
-              // Location keypad tap
-              int tx = start_x, ty = start_y;
-              int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
-              for (int i = 0; i < 12; i++) {
-                int col = i % 3;
-                int row = i / 3;
-                int x = kx + col * (kw + gap);
-                int y = ky + row * (kh + gap);
-                if (tx >= x && tx <= x + kw && ty >= y && ty <= y + kh) {
-                  if (i == 9) {
-                    if (!id(geo_input).empty()) id(geo_input).pop_back();
-                  } else if (i == 11) {
-                    if (!id(geo_input).empty()) {
-                      int gid = atoi(id(geo_input).c_str());
-                      if (gid > 0) {
-                        id(geoname_id) = gid;
-                        id(display_mode) = 0;
-                        id(get_jdate).execute();
-                      }
-                      id(geo_input) = "";
-                    }
-                  } else {
-                    const char *digits = "123456789";
-                    if (i < 9) {
-                      id(geo_input) += digits[i];
-                    } else {
-                      id(geo_input) += '0';
+                int tx = start_x, ty = start_y;
+                if (mode == 1) {
+                  int bw = 220, bh = 55, gap = 10;
+                  int sx = 10, sy = 50;
+                  for (int i = 0; i < GEONAME_COUNT; i++) {
+                    int col = i % 2;
+                    int row = i / 2;
+                    int x = sx + col * (bw + gap);
+                    int y = sy + row * (bh + gap);
+                    if (tx >= x && tx <= x + bw && ty >= y && ty <= y + bh) {
+                      id(geoname_id) = GEONAME_PRESETS[i];
+                      id(geoname_idx) = i;
+                      id(display_mode) = 0;
+                      id(get_jdate).execute();
+                      id(main_display).update();
+                      break;
                     }
                   }
-                  id(main_display).update();
-                  break;
+                  int cy = sy + 3 * (bh + gap) + 4;
+                  if (tx >= 10 && tx <= 230 && ty >= cy && ty <= cy + 36) {
+                    id(display_mode) = 3;
+                    id(main_display).update();
+                  }
+                  if (tx >= 250 && tx <= 470 && ty >= cy && ty <= cy + 36) {
+                    id(display_mode) = 0;
+                    id(main_display).update();
+                  }
+                } else if (mode == 3) {
+                  int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
+                  for (int i = 0; i < 12; i++) {
+                    int col = i % 3;
+                    int row = i / 3;
+                    int x = kx + col * (kw + gap);
+                    int y = ky + row * (kh + gap);
+                    if (tx >= x && tx <= x + kw && ty >= y && ty <= y + kh) {
+                      if (i == 9) {
+                        if (!id(geo_input).empty()) id(geo_input).pop_back();
+                      } else if (i == 11) {
+                        if (!id(geo_input).empty()) {
+                          int gid = atoi(id(geo_input).c_str());
+                          if (gid > 0) {
+                            id(geoname_id) = gid;
+                            id(geoname_idx) = -1;
+                            id(display_mode) = 0;
+                            id(get_jdate).execute();
+                          }
+                          id(geo_input) = "";
+                        }
+                      } else {
+                        const char *digits = "123456789";
+                        if (i < 9) {
+                          id(geo_input) += digits[i];
+                        } else {
+                          id(geo_input) += '0';
+                        }
+                      }
+                      id(main_display).update();
+                      break;
+                    }
+                  }
+                  if (tx >= 10 && tx <= 470 && ty >= 288 && ty <= 320) {
+                    id(display_mode) = 0;
+                    id(main_display).update();
+                  }
+                } else if (mode == 2) {
+                  int tx2 = start_x, ty2 = start_y;
+                  if (tx2 >= 40 && tx2 <= 440 && ty2 >= 190 && ty2 <= 230) {
+                    id(display_mode) = 0;
+                    App.safe_reboot();
+                  }
                 }
               }
-            } else if (mode == 2) {
-              // WiFi screen tap - check reset button
-              int tx = start_x, ty = start_y;
-              if (tx >= 40 && tx <= 440 && ty >= 190 && ty <= 230) {
-                id(display_mode) = 0;
-                App.safe_reboot();
-              }
             }
+
             start_x = -1;
             start_y = -1;
+            last_x = -1;
+            last_y = -1;
           }

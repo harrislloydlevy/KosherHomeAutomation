@@ -184,9 +184,9 @@ static std::string next_day_iso(const std::string &iso) {
 // Predefined locations
 // ============================================================================
 
-static const int GEONAME_PRESETS[] = {2147714, 5128581, 281184, 2643743, 293397};
-static const char *GEONAME_CITIES[] = {"Sydney","New York","Jerusalem","London","Tel Aviv"};
-static const int GEONAME_COUNT = 5;
+static const int GEONAME_PRESETS[] = {2147714, 2158177, 5128581, 5368361, 281184, 2643743};
+static const char *GEONAME_CITIES[] = {"Sydney","Melbourne","New York","Los Angeles","Jerusalem","London"};
+static const int GEONAME_COUNT = 6;
 
 // ============================================================================
 // URL builders
@@ -650,7 +650,8 @@ static void extract_display_data(
   strip_newlines(shofar_status);
 
   // ---- Footer ----
-  footer = str_sprintf("%s | %s", heb_mon, GEONAME_CITIES[geoname_idx]);
+  const char *city_name = (geoname_idx >= 0 && geoname_idx < GEONAME_COUNT) ? GEONAME_CITIES[geoname_idx] : "Custom";
+  footer = str_sprintf("%s | %s", heb_mon, city_name);
 }
 
 // ============================================================================
@@ -856,13 +857,15 @@ static void render_location_screen(
     TIconFont *font_icons,
     TImage *bg_img,
     int geoname_id,
-    const std::string &input) {
+    const std::string &input,
+    bool custom_mode) {
 
   auto c_bg    = Color(0, 0, 0);
   auto c_gold  = Color(255, 200, 100);
   auto c_wht   = Color(255, 255, 255);
   auto c_dim   = Color(160, 160, 160);
   auto c_btn   = Color(40, 40, 80);
+  auto c_sel   = Color(80, 80, 40);
 
   if (bg_img) it.image(0, 0, bg_img);
 
@@ -870,58 +873,77 @@ static void render_location_screen(
   it.filled_rectangle(0, 0, 480, 28, c_bg);
   it.print(4, 6, font_small, c_wht, "Set Location");
 
-  // Current location info
-  it.print(10, 36, font_mid, c_gold, "Current GeoName ID:");
-  char id_buf[32];
-  snprintf(id_buf, sizeof(id_buf), "%d", geoname_id);
-  it.print(10, 60, font_mid, c_wht, id_buf);
+  if (!custom_mode) {
+    // Preset city grid: 2 columns x 3 rows
+    it.print(10, 32, font_small, c_dim, "Tap a city:");
+    int bw = 220, bh = 55, gap = 10;
+    int sx = 10, sy = 50;
+    for (int i = 0; i < GEONAME_COUNT; i++) {
+      int col = i % 2;
+      int row = i / 2;
+      int x = sx + col * (bw + gap);
+      int y = sy + row * (bh + gap);
+      bool sel = (GEONAME_PRESETS[i] == geoname_id);
+      it.filled_rectangle(x, y, bw, bh, sel ? c_sel : c_btn);
+      it.rectangle(x, y, bw, bh, sel ? c_gold : c_dim);
+      // City name centered
+      int tx = x + bw / 2;
+      int ty = y + bh / 2 - 8;
+      it.print(tx, ty, font_mid, c_wht, TextAlign::CENTER, GEONAME_CITIES[i]);
+    }
+    // Custom ID button
+    int cy = sy + 3 * (bh + gap) + 4;
+    it.filled_rectangle(10, cy, 220, 36, c_btn);
+    it.rectangle(10, cy, 220, 36, c_dim);
+    it.print(120, cy + 8, font_small, c_wht, TextAlign::CENTER, "Custom ID...");
+    // Back button
+    it.filled_rectangle(250, cy, 220, 36, c_btn);
+    it.rectangle(250, cy, 220, 36, c_dim);
+    it.print(360, cy + 8, font_small, c_wht, TextAlign::CENTER, "Back");
+  } else {
+    // Custom ID entry with keypad
+    it.print(10, 36, font_mid, c_gold, "Current ID:");
+    char id_buf[32];
+    snprintf(id_buf, sizeof(id_buf), "%d", geoname_id);
+    it.print(10, 60, font_mid, c_wht, id_buf);
 
-  // Input display
-  it.filled_rectangle(10, 90, 460, 36, c_btn);
-  std::string display_str = input.empty() ? "Enter ID..." : input;
-  it.print(16, 96, font_mid, c_wht, display_str.c_str());
+    it.filled_rectangle(10, 90, 460, 36, c_btn);
+    std::string display_str = input.empty() ? "Enter ID..." : input;
+    it.print(16, 96, font_mid, c_wht, display_str.c_str());
 
-  it.print(10, 136, font_small, c_dim, "Lookup your city's GeoName ID at:");
-  it.print(10, 152, font_small, c_gold, "hebcal.com/geo");
+    it.print(10, 136, font_small, c_dim, "Lookup your city's GeoName ID at:");
+    it.print(10, 152, font_small, c_gold, "hebcal.com/geo");
 
-  // Numeric keypad - 3x4 grid
-  // Keys: 1-9, backspace, 0, submit
-  // Position: x from 20 to 460, y from 180 to 280
-  // Each key: 100x30, with 10px gaps
-  int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
-  const char *keys[] = {
-    "1", "2", "3",
-    "4", "5", "6",
-    "7", "8", "9",
-    "\U000F049A", "0", "\u2714"
-  };
-  for (int i = 0; i < 12; i++) {
-    int col = i % 3;
-    int row = i / 3;
-    int x = kx + col * (kw + gap);
-    int y = ky + row * (kh + gap);
-    // Draw key background
-    it.filled_rectangle(x, y, kw, kh, c_btn);
-    // Draw key border
-    it.rectangle(x, y, kw, kh, c_dim);
-    // Draw key label
-    int tx = x + kw / 2;
-    int ty = y + 4;
-    if (i == 9) {
-      // Backspace icon
-      it.print(tx - 16, ty + 2, font_icons, c_gold, "\U000F049A");
-    } else if (i == 11) {
-      // Submit checkmark
-      it.print(tx - 8, ty + 2, font_mid, c_gold, "\u2714");
-    } else {
-      it.print(tx - 6, ty + 2, font_mid, c_wht, keys[i]);
+    int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
+    const char *keys[] = {
+      "1", "2", "3",
+      "4", "5", "6",
+      "7", "8", "9",
+      "\U000F049A", "0", "\u2714"
+    };
+    for (int i = 0; i < 12; i++) {
+      int col = i % 3;
+      int row = i / 3;
+      int x = kx + col * (kw + gap);
+      int y = ky + row * (kh + gap);
+      it.filled_rectangle(x, y, kw, kh, c_btn);
+      it.rectangle(x, y, kw, kh, c_dim);
+      int tx = x + kw / 2;
+      int ty = y + 4;
+      if (i == 9) {
+        it.print(tx - 16, ty + 2, font_icons, c_gold, "\U000F049A");
+      } else if (i == 11) {
+        it.print(tx - 8, ty + 2, font_mid, c_gold, "\u2714");
+      } else {
+        it.print(tx - 6, ty + 2, font_mid, c_wht, keys[i]);
+      }
     }
   }
 
   // Footer
   it.filled_rectangle(0, 287, 480, 1, c_dim);
   it.filled_rectangle(0, 288, 480, 32, c_bg);
-  it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Right to return");
+  it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe to return");
 }
 
 // ============================================================================
