@@ -711,35 +711,35 @@ static void render_shabbos(
   // ---- Left column: halachic dates for the current day (full height) ----
   int x = mx, y = my;
   // Hebrew date (large, right-aligned)
-  it.print(x + 190 - mx - 4, y, font_mid, c_wht, TextAlign::RIGHT, hebrew_date.c_str()); y += 22;
+  it.print(x + 190 - mx - 4, y, font_mid, c_wht, TextAlign::RIGHT, hebrew_date.c_str()); y += 20;
   // English date
-  it.print(x, y, font_small, c_wht, english_date.c_str()); y += 16;
+  it.print(x, y, font_small, c_wht, english_date.c_str()); y += 14;
   // Today notes (Omer, Selichot — gold)
   if (!today_notes.empty()) {
     std::string::size_type pos = 0;
     while (true) {
       auto nl = today_notes.find('\n', pos);
       if (nl == today_notes.npos) {
-        it.print(x, y, font_small, c_wht, today_notes.substr(pos).c_str()); y += 14; break;
+        it.print(x, y, font_small, c_wht, today_notes.substr(pos).c_str()); y += 13; break;
       }
-      it.print(x, y, font_small, c_wht, today_notes.substr(pos, nl - pos).c_str()); y += 14;
+      it.print(x, y, font_small, c_wht, today_notes.substr(pos, nl - pos).c_str()); y += 13;
       pos = nl + 1;
     }
-    y += 4;
+    y += 2;
   }
   // Shofar status (Elul/Tishrei only)
   if (!shofar_status.empty()) {
-    it.print(x, y, font_small, c_wht, shofar_status.c_str()); y += 16;
+    it.print(x, y, font_small, c_wht, shofar_status.c_str()); y += 14;
   }
   // Candle lighting
   if (candles_time != "--:--") {
     it.print(x, y, font_icons, c_wht, candles_icon.c_str());
-    it.print(x + 24, y, font_mid, c_wht, candles_time.c_str()); y += 22;
+    it.print(x + 24, y, font_mid, c_wht, candles_time.c_str()); y += 18;
   }
   // Havdalah
   if (havdalah_time != "--:--") {
     it.print(x, y, font_icons, c_wht, havdalah_icon.c_str());
-    it.print(x + 24, y, font_mid, c_wht, havdalah_time.c_str()); y += 22;
+    it.print(x + 24, y, font_mid, c_wht, havdalah_time.c_str()); y += 18;
   }
   // Zmanim (Mincha, Plag, Maariv)
   if (!zmanim.empty()) {
@@ -747,9 +747,9 @@ static void render_shabbos(
     while (true) {
       auto nl = zmanim.find('\n', pos);
       if (nl == zmanim.npos) {
-        it.print(x, y, font_small, c_wht, zmanim.substr(pos).c_str()); y += 14; break;
+        it.print(x, y, font_small, c_wht, zmanim.substr(pos).c_str()); y += 13; break;
       }
-      it.print(x, y, font_small, c_wht, zmanim.substr(pos, nl - pos).c_str()); y += 14;
+      it.print(x, y, font_small, c_wht, zmanim.substr(pos, nl - pos).c_str()); y += 13;
       pos = nl + 1;
     }
   }
