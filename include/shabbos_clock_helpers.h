@@ -483,6 +483,19 @@ static void extract_display_data(
     i++;
   }
 
+  // Deduplicate by base title (keeps first occurrence).
+  std::vector<UpcomingEvt> deduped;
+  std::vector<std::string> seen;
+  for (const UpcomingEvt &e : merged) {
+    std::string base = event_base_title(e.title);
+    bool found = false;
+    for (const std::string &s : seen) if (s == base) { found = true; break; }
+    if (found) continue;
+    seen.push_back(base);
+    deduped.push_back(e);
+  }
+  merged = deduped;
+
   // Build upcoming string from merged events.
   for (const UpcomingEvt &e : merged) {
     if (!upcoming.empty()) upcoming += "\n";
@@ -659,9 +672,9 @@ static void render_shabbos(
     const std::string &today_notes,
     const std::string &shofar_status) {
 
-  auto c_gold  = Color(255, 200, 100);
+  auto c_wht  = Color(255, 200, 100);
   auto c_wht   = Color(255, 255, 255);
-  auto c_dim   = Color(160, 160, 160);
+  auto c_wht   = Color(160, 160, 160);
   auto c_div   = Color(50, 50, 40);
 
   // Background image (already darkened on disk for semi-transparent boxes).
@@ -687,26 +700,26 @@ static void render_shabbos(
     while (true) {
       auto nl = today_notes.find('\n', pos);
       if (nl == today_notes.npos) {
-        it.print(x, y, font_small, c_gold, today_notes.substr(pos).c_str()); y += 14; break;
+        it.print(x, y, font_small, c_wht, today_notes.substr(pos).c_str()); y += 14; break;
       }
-      it.print(x, y, font_small, c_gold, today_notes.substr(pos, nl - pos).c_str()); y += 14;
+      it.print(x, y, font_small, c_wht, today_notes.substr(pos, nl - pos).c_str()); y += 14;
       pos = nl + 1;
     }
     y += 4;
   }
   // Shofar status (Elul/Tishrei only)
   if (!shofar_status.empty()) {
-    it.print(x, y, font_small, c_gold, shofar_status.c_str()); y += 16;
+    it.print(x, y, font_small, c_wht, shofar_status.c_str()); y += 16;
   }
   // Candle lighting
   if (candles_time != "--:--") {
-    it.print(x, y, font_icons, c_gold, candles_icon.c_str());
-    it.print(x + 24, y, font_mid, c_gold, candles_time.c_str()); y += 22;
+    it.print(x, y, font_icons, c_wht, candles_icon.c_str());
+    it.print(x + 24, y, font_mid, c_wht, candles_time.c_str()); y += 22;
   }
   // Havdalah
   if (havdalah_time != "--:--") {
-    it.print(x, y, font_icons, c_gold, havdalah_icon.c_str());
-    it.print(x + 24, y, font_mid, c_gold, havdalah_time.c_str()); y += 22;
+    it.print(x, y, font_icons, c_wht, havdalah_icon.c_str());
+    it.print(x + 24, y, font_mid, c_wht, havdalah_time.c_str()); y += 22;
   }
   // Zmanim (Mincha, Plag, Maariv)
   if (!zmanim.empty()) {
@@ -714,9 +727,9 @@ static void render_shabbos(
     while (true) {
       auto nl = zmanim.find('\n', pos);
       if (nl == zmanim.npos) {
-        it.print(x, y, font_small, c_dim, zmanim.substr(pos).c_str()); y += 14; break;
+        it.print(x, y, font_small, c_wht, zmanim.substr(pos).c_str()); y += 14; break;
       }
-      it.print(x, y, font_small, c_dim, zmanim.substr(pos, nl - pos).c_str()); y += 14;
+      it.print(x, y, font_small, c_wht, zmanim.substr(pos, nl - pos).c_str()); y += 14;
       pos = nl + 1;
     }
   }
@@ -725,8 +738,8 @@ static void render_shabbos(
   x = 194; y = my;
   int col_w_r = 286;
   // Book icon + English parsha name
-  it.print(x, y, font_icons, c_dim, "\U000F1CCC");
-  if (!parasha_english.empty()) { it.print(x + 22, y, font_small, c_gold, parasha_english.c_str()); y += 14; }
+  it.print(x, y, font_icons, c_wht, "\U000F1CCC");
+  if (!parasha_english.empty()) { it.print(x + 22, y, font_small, c_wht, parasha_english.c_str()); y += 14; }
   else y += 14;
   // Hebrew parsha name (right-aligned)
   if (!parasha_hebrew.empty()) { it.print(x + col_w_r - 4, y, font_small, c_wht, TextAlign::RIGHT, parasha_hebrew.c_str()); y += 14; }
@@ -742,9 +755,9 @@ static void render_shabbos(
     while (true) {
       auto nl = daily_study.find('\n', pos);
       if (nl == daily_study.npos) {
-        it.print(x, y, font_small, c_dim, daily_study.substr(pos).c_str()); y += 14; break;
+        it.print(x, y, font_small, c_wht, daily_study.substr(pos).c_str()); y += 14; break;
       }
-      it.print(x, y, font_small, c_dim, daily_study.substr(pos, nl - pos).c_str()); y += 14;
+      it.print(x, y, font_small, c_wht, daily_study.substr(pos, nl - pos).c_str()); y += 14;
       pos = nl + 1;
     }
     y += 6;
@@ -767,7 +780,7 @@ static void render_shabbos(
       std::string greg_s  = (p3 != std::string::npos) ? evt.substr(p3 + 1) : "";
       std::string date_line = hd_s;
       if (!greg_s.empty()) date_line += "  " + greg_s;
-      if (!date_line.empty()) { it.print(x, y, font_small, c_dim, date_line.c_str()); y += 14; }
+      if (!date_line.empty()) { it.print(x, y, font_small, c_wht, date_line.c_str()); y += 14; }
       std::string name_line = title;
       if (!heb.empty()) name_line += "  " + rtl(heb);
       if (!name_line.empty()) { it.print(x, y, font_small, c_wht, name_line.c_str()); y += 14; }
@@ -779,7 +792,7 @@ static void render_shabbos(
   }
 
   // ---- Footer bar (full width, 32px) ----
-  it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Left to set location, Swipe Right to setup Wifi");
+  it.print(240, 295, font_small, c_wht, TextAlign::CENTER, "Swipe Left to set location, Swipe Right to setup Wifi");
 }
 
 // ============================================================================
