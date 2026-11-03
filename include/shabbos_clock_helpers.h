@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <cctype>
 #include <string>
 #include <vector>
 #include "esphome/core/helpers.h"
@@ -140,6 +141,43 @@ static bool matches_today(const char *date_str, int yr, int mo, int dy) {
   if (sscanf(date_str, "%d-%d-%d", &y, &m, &d) >= 3)
     return y == yr && m == mo && d == dy;
   return false;
+}
+
+// Normalize an event title to its base (strip trailing year and roman numerals)
+// so that "Rosh Hashana 5787" and "Rosh Hashana II" both become "Rosh Hashana".
+static std::string event_base_title(const std::string &title) {
+  std::string s = title;
+  // strip trailing 4-digit year
+  if (s.size() >= 5 && s[s.size()-5] == ' ' &&
+      isdigit((unsigned char)s[s.size()-1]) && isdigit((unsigned char)s[s.size()-2]) &&
+      isdigit((unsigned char)s[s.size()-3]) && isdigit((unsigned char)s[s.size()-4])) {
+    s.resize(s.size() - 5);
+  }
+  // strip trailing roman numeral tokens (II, III, IV, V)
+  while (true) {
+    size_t sp = s.rfind(' ');
+    if (sp == std::string::npos) break;
+    std::string last = s.substr(sp + 1);
+    if (last == "II" || last == "III" || last == "IV" || last == "V" || last == "2" || last == "3") {
+      s.resize(sp);
+    } else break;
+  }
+  // trim trailing spaces
+  while (!s.empty() && s.back() == ' ') s.pop_back();
+  return s;
+}
+
+// Compute the next calendar day as ISO "YYYY-MM-DD".
+static std::string next_day_iso(const std::string &iso) {
+  int y = 0, m = 0, d = 0;
+  if (sscanf(iso.c_str(), "%d-%d-%d", &y, &m, &d) < 3) return "";
+  static const int dim[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+  int lim = dim[m - 1];
+  if (m == 2 && (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0))) lim = 29;
+  if (++d > lim) { d = 1; if (++m > 12) { m = 1; y++; } }
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%04d-%02d-%02d", y, m, d);
+  return std::string(buf);
 }
 
 // ============================================================================
@@ -282,6 +320,10 @@ static void extract_display_data(
   bool found_today = false;
   bool found_parsha = false;
 
+  // Temporary collection of upcoming events (merged for 2-day hags later).
+  struct UpcomingEvt { std::string title; std::string hd_short; std::string heb; std::string greg_s; std::string date_iso; };
+  std::vector<UpcomingEvt> up_events;
+
   bool is_yomtov = false, is_shabbat = false;
   const char *yt_name = "";
 
@@ -322,31 +364,32 @@ static void extract_display_data(
         is_yomtov = true;
         yt_name = JSON_GET(obj, ["title"]);
       }
-      if (!upcoming.empty()) upcoming += "\n";
       {
         const char *hd = JSON_GET(obj, ["hdate"]);
         const char *hb_raw = JSON_GET(obj, ["hebrew"]);
-        // Strip Hebrew year from both hdate and hebrew (last word)
         std::string hd_short(hd);
         size_t sp = hd_short.rfind(' ');
         if (sp != std::string::npos) hd_short.resize(sp);
         std::string hb(hb_raw);
         sp = hb.rfind(' ');
         if (sp != std::string::npos) hb.resize(sp);
-        // Gregorian date for display
         const char *gd = JSON_GET(obj, ["date"]);
         int gy = 0, gm = 0, gd_n = 0;
         char gb[16] = "";
         if (sscanf(gd, "%d-%d-%d", &gy, &gm, &gd_n) >= 3)
           snprintf(gb, sizeof(gb), "%d %s", gd_n, mon_short(gm));
-        // Format: title|hd_short|hebrew|greg_date
-        upcoming += str_sprintf("%s|%s|%s|%s",
-          JSON_GET(obj, ["title"]), hd_short.c_str(), hb.c_str(), gb);
+        UpcomingEvt e;
+        e.title = JSON_GET(obj, ["title"]);
+        e.hd_short = hd_short;
+        e.heb = hb;
+        e.greg_s = gb;
+        e.date_iso = gd ? std::string(gd) : std::string();
+        if (e.date_iso.size() > 10) e.date_iso.resize(10);
+        up_events.push_back(e);
       }
 
     // Rosh Chodesh — same format as holidays
     } else if (!strcmp(cat, "roshchodesh")) {
-      if (!upcoming.empty()) upcoming += "\n";
       {
         const char *hd = JSON_GET(obj, ["hdate"]);
         const char *hb_raw = JSON_GET(obj, ["hebrew"]);
@@ -361,8 +404,14 @@ static void extract_display_data(
         char gb[16] = "";
         if (sscanf(gd, "%d-%d-%d", &gy, &gm, &gd_n) >= 3)
           snprintf(gb, sizeof(gb), "%d %s", gd_n, mon_short(gm));
-        upcoming += str_sprintf("%s|%s|%s|%s",
-          JSON_GET(obj, ["title"]), hd_short.c_str(), hb.c_str(), gb);
+        UpcomingEvt e;
+        e.title = JSON_GET(obj, ["title"]);
+        e.hd_short = hd_short;
+        e.heb = hb;
+        e.greg_s = gb;
+        e.date_iso = gd ? std::string(gd) : std::string();
+        if (e.date_iso.size() > 10) e.date_iso.resize(10);
+        up_events.push_back(e);
       }
 
     // Omer counting — only for today, shown in today_notes
@@ -385,6 +434,62 @@ static void extract_display_data(
       }
     }
   }
+
+  // Merge consecutive 2-day holidays / Rosh Chodesh into single entries.
+  std::vector<UpcomingEvt> merged;
+  for (size_t i = 0; i < up_events.size(); ) {
+    UpcomingEvt cur = up_events[i];
+    if (i + 1 < up_events.size()) {
+      const UpcomingEvt &nx = up_events[i + 1];
+      if (event_base_title(nx.title) == event_base_title(cur.title) &&
+          !cur.date_iso.empty() && nx.date_iso == next_day_iso(cur.date_iso)) {
+        // Combine date ranges.
+        // Hebrew date: "1 Tishrei" + "2 Tishrei" -> "1-2 Tishrei" if same month.
+        {
+          size_t sp_cur = cur.hd_short.find(' ');
+          size_t sp_nx = nx.hd_short.find(' ');
+          std::string mon_cur = (sp_cur == std::string::npos) ? "" : cur.hd_short.substr(sp_cur + 1);
+          std::string mon_nx = (sp_nx == std::string::npos) ? "" : nx.hd_short.substr(sp_nx + 1);
+          std::string day_cur = (sp_cur == std::string::npos) ? cur.hd_short : cur.hd_short.substr(0, sp_cur);
+          std::string day_nx = (sp_nx == std::string::npos) ? nx.hd_short : nx.hd_short.substr(0, sp_nx);
+          if (mon_cur == mon_nx && !mon_cur.empty()) {
+            cur.hd_short = day_cur + "-" + day_nx + " " + mon_cur;
+          } else {
+            cur.hd_short = cur.hd_short + " - " + nx.hd_short;
+          }
+        }
+        // Gregorian date range.
+        {
+          // greg_s like "12 Sep"
+          size_t sp_cur = cur.greg_s.find(' ');
+          size_t sp_nx = nx.greg_s.find(' ');
+          std::string mon_cur = (sp_cur == std::string::npos) ? "" : cur.greg_s.substr(sp_cur + 1);
+          std::string mon_nx = (sp_nx == std::string::npos) ? "" : nx.greg_s.substr(sp_nx + 1);
+          std::string day_cur = (sp_cur == std::string::npos) ? cur.greg_s : cur.greg_s.substr(0, sp_cur);
+          std::string day_nx = (sp_nx == std::string::npos) ? nx.greg_s : nx.greg_s.substr(0, sp_nx);
+          if (mon_cur == mon_nx && !mon_cur.empty()) {
+            cur.greg_s = day_cur + "-" + day_nx + " " + mon_cur;
+          } else {
+            cur.greg_s = cur.greg_s + " - " + nx.greg_s;
+          }
+        }
+        // Keep title/heb from first day.
+        i += 2;
+        merged.push_back(cur);
+        continue;
+      }
+    }
+    merged.push_back(cur);
+    i++;
+  }
+
+  // Build upcoming string from merged events.
+  for (const UpcomingEvt &e : merged) {
+    if (!upcoming.empty()) upcoming += "\n";
+    upcoming += str_sprintf("%s|%s|%s|%s",
+      e.title.c_str(), e.hd_short.c_str(), e.heb.c_str(), e.greg_s.c_str());
+  }
+
   // Fallback if today's hebdate wasn't found in the response
   if (!found_today) heb_today_hebrew = JSON_GET(doc, ["items"][0]["hebrew"]);
 
@@ -554,81 +659,26 @@ static void render_shabbos(
     const std::string &today_notes,
     const std::string &shofar_status) {
 
-  auto c_bg    = Color(0, 0, 0);
   auto c_gold  = Color(255, 200, 100);
   auto c_wht   = Color(255, 255, 255);
   auto c_dim   = Color(160, 160, 160);
   auto c_div   = Color(50, 50, 40);
 
-  // Draw background image first, then overlay boxes on top
+  // Background image (already darkened on disk for semi-transparent boxes).
   if (bg_img) it.image(0, 0, bg_img);
 
   // ---- Header bar (full width, 28px) ----
-  it.filled_rectangle(0, 0, 480, 28, c_bg);
   it.print(240, 6, font_small, c_wht, TextAlign::CENTER, hdr.c_str());
 
-  // ---- Dividers between the 4 quadrants ----
-  // Top boxes are asymmetric: left=190px (times), right=290px (parsha text)
-  // Bottom boxes are equal width (240px each)
-  it.filled_rectangle(0, 145, 480, 1, c_div);             // horizontal
-  it.filled_rectangle(190, 32, 1, 113, c_div);             // top vertical (at x=190)
-  it.filled_rectangle(240, 145, 1, 142, c_div);            // bottom vertical (at x=240)
+  // ---- Vertical divider between left/right columns ----
+  it.filled_rectangle(190, 28, 1, 260, c_div);
 
-  int mx = 8, my = 34;               // content margin from box edges
-  int col_w_l = 190, col_w_r = 290;  // top left/right box widths (edge to edge)
-  int col_w_b = 240;                 // bottom box width (edge to divider to edge)
-  int box_h_t = 111, box_h_b = 138;  // top/bottom box heights
+  int mx = 8, my = 34;
 
-  // ---- Top-Left: Times (candle, havdalah, shofar, mincha/plag/maariv) ----
+  // ---- Left column: halachic dates for the current day (full height) ----
   int x = mx, y = my;
-  it.filled_rectangle(0, y - 4, col_w_l, box_h_t, c_bg);
-  // Candle lighting (shown only when valid for today)
-  if (candles_time != "--:--") {
-    it.print(x, y, font_icons, c_gold, candles_icon.c_str());
-    it.print(x + 24, y, font_mid, c_gold, candles_time.c_str()); y += 22;
-  }
-  // Havdalah (shown only when valid for today)
-  if (havdalah_time != "--:--") {
-    it.print(x, y, font_icons, c_gold, havdalah_icon.c_str());
-    it.print(x + 24, y, font_mid, c_gold, havdalah_time.c_str()); y += 22;
-  }
-  // Shofar status (Elul/Tishrei only)
-  if (!shofar_status.empty()) {
-    it.print(x, y, font_small, c_gold, shofar_status.c_str()); y += 16;
-  }
-  // Zmanim (Mincha, Plag, Maariv — each on its own line)
-  if (!zmanim.empty()) {
-    std::string::size_type pos = 0;
-    while (true) {
-      auto nl = zmanim.find('\n', pos);
-      if (nl == zmanim.npos) {
-        it.print(x, y, font_small, c_dim, zmanim.substr(pos).c_str());
-        break;
-      }
-      it.print(x, y, font_small, c_dim, zmanim.substr(pos, nl - pos).c_str());
-      y += 16;
-      pos = nl + 1;
-    }
-  }
-
-  // ---- Top-Right: Parsha (English name, Hebrew name, Torah, Haftarah) ----
-  x = 194; y = my;
-  it.filled_rectangle(x - 4, y - 4, col_w_r, box_h_t, c_bg);
-  it.print(x, y, font_icons, c_dim, "\U000F1CCC");  // book icon
-  // English parsha name (gold, next to book icon)
-  if (!parasha_english.empty()) { it.print(x + 22, y, font_small, c_gold, parasha_english.c_str()); y += 14; }
-  // Hebrew parsha name (white, right-aligned — Hebrew reads R-to-L)
-  if (!parasha_hebrew.empty()) { it.print(x + col_w_r - 4, y, font_small, c_wht, TextAlign::RIGHT, parasha_hebrew.c_str()); y += 14; }
-  // Torah reading
-  if (!parasha_torah.empty()) { it.print(x, y, font_small, c_wht, parasha_torah.c_str()); y += 14; }
-  // Haftarah reading
-  if (!parasha_haftarah.empty()) { it.print(x, y, font_small, c_wht, parasha_haftarah.c_str()); y += 14; }
-
-  // ---- Bottom-Left: Today (Hebrew date, English date, notes, daily study) ----
-  x = mx; y = 149;
-  it.filled_rectangle(0, y - 4, col_w_b, box_h_b, c_bg);
-  // Hebrew date (right-aligned — Hebrew reads R-to-L)
-  it.print(x + col_w_b - 4, y, font_mid, c_wht, TextAlign::RIGHT, hebrew_date.c_str()); y += 20;
+  // Hebrew date (large, right-aligned)
+  it.print(x + 190 - mx - 4, y, font_mid, c_wht, TextAlign::RIGHT, hebrew_date.c_str()); y += 22;
   // English date
   it.print(x, y, font_small, c_wht, english_date.c_str()); y += 16;
   // Today notes (Omer, Selichot — gold)
@@ -637,40 +687,77 @@ static void render_shabbos(
     while (true) {
       auto nl = today_notes.find('\n', pos);
       if (nl == today_notes.npos) {
-        it.print(x, y, font_small, c_gold, today_notes.substr(pos).c_str());
-        break;
+        it.print(x, y, font_small, c_gold, today_notes.substr(pos).c_str()); y += 14; break;
       }
-      it.print(x, y, font_small, c_gold, today_notes.substr(pos, nl - pos).c_str());
-      y += 16;
+      it.print(x, y, font_small, c_gold, today_notes.substr(pos, nl - pos).c_str()); y += 14;
+      pos = nl + 1;
+    }
+    y += 4;
+  }
+  // Shofar status (Elul/Tishrei only)
+  if (!shofar_status.empty()) {
+    it.print(x, y, font_small, c_gold, shofar_status.c_str()); y += 16;
+  }
+  // Candle lighting
+  if (candles_time != "--:--") {
+    it.print(x, y, font_icons, c_gold, candles_icon.c_str());
+    it.print(x + 24, y, font_mid, c_gold, candles_time.c_str()); y += 22;
+  }
+  // Havdalah
+  if (havdalah_time != "--:--") {
+    it.print(x, y, font_icons, c_gold, havdalah_icon.c_str());
+    it.print(x + 24, y, font_mid, c_gold, havdalah_time.c_str()); y += 22;
+  }
+  // Zmanim (Mincha, Plag, Maariv)
+  if (!zmanim.empty()) {
+    std::string::size_type pos = 0;
+    while (true) {
+      auto nl = zmanim.find('\n', pos);
+      if (nl == zmanim.npos) {
+        it.print(x, y, font_small, c_dim, zmanim.substr(pos).c_str()); y += 14; break;
+      }
+      it.print(x, y, font_small, c_dim, zmanim.substr(pos, nl - pos).c_str()); y += 14;
       pos = nl + 1;
     }
   }
-  // Daily study (Daf Yomi, Psalms, Rambam — dim)
+
+  // ---- Right column: parsha, daily learning, upcoming ----
+  x = 194; y = my;
+  int col_w_r = 286;
+  // Book icon + English parsha name
+  it.print(x, y, font_icons, c_dim, "\U000F1CCC");
+  if (!parasha_english.empty()) { it.print(x + 22, y, font_small, c_gold, parasha_english.c_str()); y += 14; }
+  else y += 14;
+  // Hebrew parsha name (right-aligned)
+  if (!parasha_hebrew.empty()) { it.print(x + col_w_r - 4, y, font_small, c_wht, TextAlign::RIGHT, parasha_hebrew.c_str()); y += 14; }
+  // Torah reading
+  if (!parasha_torah.empty()) { it.print(x, y, font_small, c_wht, parasha_torah.c_str()); y += 14; }
+  // Haftarah reading
+  if (!parasha_haftarah.empty()) { it.print(x, y, font_small, c_wht, parasha_haftarah.c_str()); y += 14; }
+  y += 6;
+
+  // Daily learning
   if (!daily_study.empty()) {
     std::string::size_type pos = 0;
     while (true) {
       auto nl = daily_study.find('\n', pos);
       if (nl == daily_study.npos) {
-        it.print(x, y, font_small, c_dim, daily_study.substr(pos).c_str());
-        break;
+        it.print(x, y, font_small, c_dim, daily_study.substr(pos).c_str()); y += 14; break;
       }
-      it.print(x, y, font_small, c_dim, daily_study.substr(pos, nl - pos).c_str());
-      y += 16;
+      it.print(x, y, font_small, c_dim, daily_study.substr(pos, nl - pos).c_str()); y += 14;
       pos = nl + 1;
     }
+    y += 6;
   }
 
-  // ---- Bottom-Right: Upcoming events ----
-  // Each event is stored as: title|hd_short|hebrew|greg_date
-  // Rendered as: line 1 = dates, line 2 = English name + Hebrew name (RTL)
-  x = 244; y = 149;
-  it.filled_rectangle(x - 4, y - 4, col_w_b, box_h_b, c_bg);
+  // Upcoming (next 3)
   if (!upcoming.empty()) {
     std::string::size_type pos = 0;
-    while (true) {
+    int _evc = 0;
+    while (_evc < 3) {
+      if (pos >= upcoming.size()) break;
       auto nl = upcoming.find('\n', pos);
       std::string evt = (nl == upcoming.npos) ? upcoming.substr(pos) : upcoming.substr(pos, nl - pos);
-      // Split on '|' to get the 4 fields
       size_t p1 = evt.find('|');
       size_t p2 = p1 != std::string::npos ? evt.find('|', p1 + 1) : std::string::npos;
       size_t p3 = p2 != std::string::npos ? evt.find('|', p2 + 1) : std::string::npos;
@@ -678,23 +765,20 @@ static void render_shabbos(
       std::string hd_s    = (p2 != std::string::npos) ? evt.substr(p1 + 1, p2 - p1 - 1) : "";
       std::string heb     = (p3 != std::string::npos) ? evt.substr(p2 + 1, p3 - p2 - 1) : "";
       std::string greg_s  = (p3 != std::string::npos) ? evt.substr(p3 + 1) : "";
-      // Line 1: Hebrew date (English) + Gregorian date
       std::string date_line = hd_s;
       if (!greg_s.empty()) date_line += "  " + greg_s;
       if (!date_line.empty()) { it.print(x, y, font_small, c_dim, date_line.c_str()); y += 14; }
-      // Line 2: English name + Hebrew name (reversed for RTL display)
       std::string name_line = title;
       if (!heb.empty()) name_line += "  " + rtl(heb);
       if (!name_line.empty()) { it.print(x, y, font_small, c_wht, name_line.c_str()); y += 14; }
-      // 6px gap before next event
       y += 6;
+      _evc++;
       if (nl == upcoming.npos) break;
       pos = nl + 1;
     }
   }
 
   // ---- Footer bar (full width, 32px) ----
-  it.filled_rectangle(0, 288, 480, 32, c_bg);
   it.print(240, 295, font_small, c_dim, TextAlign::CENTER, "Swipe Left to set location, Swipe Right to setup Wifi");
 }
 
