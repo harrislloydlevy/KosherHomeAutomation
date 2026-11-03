@@ -48,6 +48,7 @@ display:
 
         int mode = id(display_mode);
         if (mode == 0) {
+          auto t = id(sntp_time).now();
           // Main Shabbos clock — draws from pre-computed g_ globals.
           // No JSON parsing happens during render; all data was extracted
           // by extract_display_data() after the last fetch.
@@ -59,7 +60,8 @@ display:
               id(g_parasha_hebrew), id(g_parasha_torah),
               id(g_parasha_haftarah), id(g_daily_study),
               id(g_parasha_english), id(g_zmanim),
-              id(g_upcoming), id(g_today_notes), id(g_shofar_status));
+              id(g_upcoming), id(g_today_notes), id(g_shofar_status),
+              t.hour, t.minute);
         } else if (mode == 1) {
           render_location_screen(it, id(alef), id(alef_mid), id(mdi), id(background),
               id(geoname_id), id(geo_input));

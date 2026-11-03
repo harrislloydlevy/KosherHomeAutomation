@@ -691,9 +691,11 @@ static void render_shabbos(
     const std::string &zmanim,
     const std::string &upcoming,
     const std::string &today_notes,
-    const std::string &shofar_status) {
+    const std::string &shofar_status,
+    int cur_hour, int cur_minute) {
 
   auto c_wht   = Color(255, 255, 255);
+  auto c_dim   = Color(130, 130, 130);
   auto c_div   = Color(50, 50, 40);
 
   if (!font_small || !font_mid || !font_icons) return;
@@ -733,23 +735,50 @@ static void render_shabbos(
   }
   // Candle lighting
   if (candles_time != "--:--") {
-    it.print(x, y, font_icons, c_wht, candles_icon.c_str());
-    it.print(x + 24, y, font_mid, c_wht, candles_time.c_str()); y += 18;
+    int ch = 0, cm = 0; char campm[4] = "";
+    if (sscanf(candles_time.c_str(), "%d:%d %3s", &ch, &cm, campm) >= 2) {
+      if (campm[0] == 'P' && ch != 12) ch += 12;
+      if (campm[0] == 'A' && ch == 12) ch = 0;
+    }
+    bool passed = (ch * 60 + cm) <= (cur_hour * 60 + cur_minute) && candles_time != "--:--";
+    auto col = passed ? c_dim : c_wht;
+    it.print(x, y, font_icons, col, candles_icon.c_str());
+    it.print(x + 24, y, font_mid, col, candles_time.c_str()); y += 18;
   }
   // Havdalah
   if (havdalah_time != "--:--") {
-    it.print(x, y, font_icons, c_wht, havdalah_icon.c_str());
-    it.print(x + 24, y, font_mid, c_wht, havdalah_time.c_str()); y += 18;
+    int hh = 0, hm = 0; char hampm[4] = "";
+    if (sscanf(havdalah_time.c_str(), "%d:%d %3s", &hh, &hm, hampm) >= 2) {
+      if (hampm[0] == 'P' && hh != 12) hh += 12;
+      if (hampm[0] == 'A' && hh == 12) hh = 0;
+    }
+    bool passed = (hh * 60 + hm) <= (cur_hour * 60 + cur_minute);
+    auto col = passed ? c_dim : c_wht;
+    it.print(x, y, font_icons, col, havdalah_icon.c_str());
+    it.print(x + 24, y, font_mid, col, havdalah_time.c_str()); y += 18;
   }
   // Zmanim (Mincha, Plag, Maariv)
   if (!zmanim.empty()) {
     std::string::size_type pos = 0;
     while (true) {
       auto nl = zmanim.find('\n', pos);
-      if (nl == zmanim.npos) {
-        it.print(x, y, font_small, c_wht, zmanim.substr(pos).c_str()); y += 13; break;
+      std::string line = (nl == zmanim.npos) ? zmanim.substr(pos) : zmanim.substr(pos, nl - pos);
+      // Determine if this time has passed
+      int zh = 0, zm = 0; char zampm[4] = "";
+      // parse "Label: H:MM AM/PM"
+      const char *ls = line.c_str();
+      const char *colon = strchr(ls, ':');
+      if (colon) {
+        // colon points at the separator colon; time follows ": "
+        if (sscanf(colon + 1, " %d:%d %3s", &zh, &zm, zampm) >= 2) {
+          if (zampm[0] == 'P' && zh != 12) zh += 12;
+          if (zampm[0] == 'A' && zh == 12) zh = 0;
+        }
       }
-      it.print(x, y, font_small, c_wht, zmanim.substr(pos, nl - pos).c_str()); y += 13;
+      bool zpassed = (zh * 60 + zm) <= (cur_hour * 60 + cur_minute) && zh >= 0 && zampm[0] != '\0';
+      auto zcol = zpassed ? c_dim : c_wht;
+      it.print(x, y, font_small, zcol, line.c_str()); y += 13;
+      if (nl == zmanim.npos) break;
       pos = nl + 1;
     }
   }
