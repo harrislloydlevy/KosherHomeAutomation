@@ -904,7 +904,7 @@ static void render_shabbos(
   }
 
   // ---- Footer bar (full width, 32px) ----
-  it.print(240, 295, font_hdr, c_dark, TextAlign::CENTER, "Tap bottom-left: Location, bottom-right: WiFi");
+  it.print(240, 295, font_hdr, c_dark, TextAlign::CENTER, "Tap left: Location, right: WiFi");
 }
 
 // ============================================================================
