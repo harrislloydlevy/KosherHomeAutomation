@@ -110,6 +110,7 @@ touchscreen:
               start_y = touch.y;
               last_x = touch.x;
               last_y = touch.y;
+              ESP_LOGI("touch", "DOWN x=%d y=%d", touch.x, touch.y);
             } else {
               if (touch.x > 0 || touch.y > 0) {
                 last_x = touch.x;
@@ -123,15 +124,21 @@ touchscreen:
             int dy = ey - start_y;
             int dist = abs(dx) + abs(dy);
             bool swipe = (dist > 50 && abs(dy) > abs(dx));
+            ESP_LOGI("touch", "UP start=(%d,%d) end=(%d,%d) dx=%d dy=%d dist=%d swipe=%d mode=%d",
+              start_x, start_y, ex, ey, dx, dy, dist, swipe, mode);
 
             if (mode == 0) {
               if (swipe) {
                 if (dy > 0) {
                   id(display_mode) = 2;
+                  ESP_LOGI("touch", "Swipe DOWN -> WiFi screen");
                 } else {
                   id(display_mode) = 1;
+                  ESP_LOGI("touch", "Swipe UP -> Location screen");
                 }
                 id(main_display).update();
+              } else {
+                ESP_LOGI("touch", "Tap on main (no swipe)");
               }
             } else {
               if (swipe) {
