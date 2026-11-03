@@ -745,8 +745,8 @@ static void render_shabbos(
   auto c_div   = Color(50, 50, 40);
 
   if (!font_small || !font_mid || !font_icons) return;
-  // Background image (already darkened on disk for semi-transparent boxes).
-  if (bg_img) it.image(0, 0, bg_img);
+  // Background: solid color (image disabled for flicker testing)
+  it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
 
   // ---- Header bar (full width, 28px) ----
   auto c_dark = Color(0, 0, 0);
