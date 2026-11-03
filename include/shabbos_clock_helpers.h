@@ -763,19 +763,24 @@ static void render_shabbos(
     it.print(x, y, font_icons, col, havdalah_icon.c_str());
     it.print(x + 24, y, font_mid, col, havdalah_time.c_str()); y += 18;
   }
-  // Zmanim (Mincha, Plag, Maariv)
+  // Zmanim (Mincha, Plag, Maariv) — spread evenly over remaining space
   if (!zmanim.empty()) {
+    // Count lines
+    int zcount = 1;
+    for (size_t i = 0; i < zmanim.size(); i++) if (zmanim[i] == '\n') zcount++;
+    int avail = 284 - y;  // bottom margin 4px
+    int zspacing = (zcount > 1) ? (avail / zcount) : 15;
+    if (zspacing < 14) zspacing = 14;
+    if (zspacing > 22) zspacing = 22;
     std::string::size_type pos = 0;
     while (true) {
       auto nl = zmanim.find('\n', pos);
       std::string line = (nl == zmanim.npos) ? zmanim.substr(pos) : zmanim.substr(pos, nl - pos);
       // Determine if this time has passed
       int zh = 0, zm = 0; char zampm[4] = "";
-      // parse "Label: H:MM AM/PM"
       const char *ls = line.c_str();
       const char *colon = strchr(ls, ':');
       if (colon) {
-        // colon points at the separator colon; time follows ": "
         if (sscanf(colon + 1, " %d:%d %3s", &zh, &zm, zampm) >= 2) {
           if (zampm[0] == 'P' && zh != 12) zh += 12;
           if (zampm[0] == 'A' && zh == 12) zh = 0;
@@ -783,7 +788,7 @@ static void render_shabbos(
       }
       bool zpassed = (zh * 60 + zm) <= (cur_hour * 60 + cur_minute) && zh >= 0 && zampm[0] != '\0';
       auto zcol = zpassed ? c_dim : c_wht;
-      it.print(x, y, font_small, zcol, line.c_str()); y += 15;
+      it.print(x, y, font_small, zcol, line.c_str()); y += zspacing;
       if (nl == zmanim.npos) break;
       pos = nl + 1;
     }
