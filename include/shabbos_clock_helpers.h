@@ -989,13 +989,12 @@ static void render_location_screen(
       it.filled_rectangle(x, y, kw, kh, c_btn);
       it.rectangle(x, y, kw, kh, c_dim);
       int tx = x + kw / 2;
-      int ty = y + 4;
       if (i == 9) {
-        it.print(tx - 16, ty + 2, font_icons, c_gold, "\U000F049A");
+        it.print(tx - 16, y + 4, font_icons, c_gold, "\U000F049A");
       } else if (i == 11) {
-        it.print(tx - 4, ty + 2, font_mid, c_gold, "OK");
+        it.print(tx - 8, y + 5, font_mid, c_gold, "OK");
       } else {
-        it.print(tx - 6, ty + 2, font_mid, c_wht, keys[i]);
+        it.print(tx - 6, y + 5, font_mid, c_wht, keys[i]);
       }
     }
   }
