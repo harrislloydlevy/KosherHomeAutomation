@@ -99,107 +99,124 @@ touchscreen:
     transform:
       swap_xy: true
       mirror_x: true
-    on_touch:
+    on_update:
       - lambda: |-
-          id(touch_sx) = touch.x;
-          id(touch_sy) = touch.y;
-          ESP_LOGI("touch", "DOWN x=%d y=%d", touch.x, touch.y);
-
-    on_release:
-      - lambda: |-
-          int tx = id(touch_sx);
-          int ty = id(touch_sy);
+          static int start_x = -1, start_y = -1;
           int mode = id(display_mode);
-          ESP_LOGI("touch", "RELEASE x=%d y=%d mode=%d", tx, ty, mode);
 
-          if (tx < 0 || ty < 0) return;
-
-          if (mode == 0) {
-            if (tx < 240) {
-              id(display_mode) = 1;
-              ESP_LOGI("touch", "Tap left -> Location");
-            } else {
-              id(display_mode) = 2;
-              ESP_LOGI("touch", "Tap right -> WiFi");
-            }
-            id(need_display_update) = true;
-          } else if (mode == 1) {
-            int bw = 220, bh = 55, gap = 10;
-            int sx = 10, sy = 50;
-            for (int i = 0; i < GEONAME_COUNT; i++) {
-              int col = i % 2;
-              int row = i / 2;
-              int x = sx + col * (bw + gap);
-              int y = sy + row * (bh + gap);
-              if (tx >= x && tx <= x + bw && ty >= y && ty <= y + bh) {
-                id(geoname_id) = GEONAME_PRESETS[i];
-                id(geoname_idx) = i;
-                id(display_mode) = 0;
-                id(get_jdate).execute();
-                id(need_display_update) = true;
-                break;
-              }
-            }
-            int cy = sy + 3 * (bh + gap) + 4;
-            if (tx >= 10 && tx <= 230 && ty >= cy && ty <= cy + 36) {
-              id(display_mode) = 3;
-              id(need_display_update) = true;
-            }
-            if (tx >= 250 && tx <= 470 && ty >= cy && ty <= cy + 36) {
-              id(display_mode) = 0;
-              id(need_display_update) = true;
-            }
-            if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
-              id(display_mode) = 0;
-              id(need_display_update) = true;
-            }
-          } else if (mode == 3) {
-            int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
-            for (int i = 0; i < 12; i++) {
-              int col = i % 3;
-              int row = i / 3;
-              int x = kx + col * (kw + gap);
-              int y = ky + row * (kh + gap);
-              if (tx >= x && tx <= x + kw && ty >= y && ty <= y + kh) {
-                if (i == 9) {
-                  if (!id(geo_input).empty()) id(geo_input).pop_back();
-                } else if (i == 11) {
-                  if (!id(geo_input).empty()) {
-                    int gid = atoi(id(geo_input).c_str());
-                    if (gid > 0) {
-                      id(geoname_id) = gid;
-                      id(geoname_idx) = -1;
-                      id(display_mode) = 0;
-                      id(get_jdate).execute();
-                    }
-                    id(geo_input) = "";
-                  }
-                } else {
-                  const char *digits = "123456789";
-                  if (i < 9) {
-                    id(geo_input) += digits[i];
-                  } else {
-                    id(geo_input) += '0';
-                  }
-                }
-                id(need_display_update) = true;
-                break;
-              }
-            }
-            if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
-              id(display_mode) = 0;
-              id(need_display_update) = true;
-            }
-          } else if (mode == 2) {
-            if (tx >= 40 && tx <= 440 && ty >= 190 && ty <= 230) {
-              id(display_mode) = 0;
-              App.safe_reboot();
-            }
-            if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
-              id(display_mode) = 0;
-              id(need_display_update) = true;
+          // Determine if this is a release event
+          bool is_release = false;
+          int cx = -1, cy = -1;
+          if (touches.empty()) {
+            is_release = true;
+          } else {
+            cx = touches[0].x;
+            cy = touches[0].y;
+            int cstate = touches[0].state;
+            if (cstate == 0 || (cstate & 0x04)) {
+              is_release = true;
             }
           }
 
-          id(touch_sx) = -1;
-          id(touch_sy) = -1;
+          if (is_release) {
+            if (start_x >= 0) {
+              int tx = start_x, ty = start_y;
+              ESP_LOGI("touch", "RELEASE x=%d y=%d mode=%d", tx, ty, mode);
+
+              if (mode == 0) {
+                if (tx < 240) {
+                  id(display_mode) = 1;
+                  ESP_LOGI("touch", "Tap left -> Location");
+                } else {
+                  id(display_mode) = 2;
+                  ESP_LOGI("touch", "Tap right -> WiFi");
+                }
+                id(need_display_update) = true;
+              } else if (mode == 1) {
+                int bw = 220, bh = 55, gap = 10;
+                int sx = 10, sy = 50;
+                for (int i = 0; i < GEONAME_COUNT; i++) {
+                  int col = i % 2;
+                  int row = i / 2;
+                  int x = sx + col * (bw + gap);
+                  int y = sy + row * (bh + gap);
+                  if (tx >= x && tx <= x + bw && ty >= y && ty <= y + bh) {
+                    id(geoname_id) = GEONAME_PRESETS[i];
+                    id(geoname_idx) = i;
+                    id(display_mode) = 0;
+                    id(get_jdate).execute();
+                    id(need_display_update) = true;
+                    break;
+                  }
+                }
+                int cyb = sy + 3 * (bh + gap) + 4;
+                if (tx >= 10 && tx <= 230 && ty >= cyb && ty <= cyb + 36) {
+                  id(display_mode) = 3;
+                  id(need_display_update) = true;
+                }
+                if (tx >= 250 && tx <= 470 && ty >= cyb && ty <= cyb + 36) {
+                  id(display_mode) = 0;
+                  id(need_display_update) = true;
+                }
+                if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
+                  id(display_mode) = 0;
+                  id(need_display_update) = true;
+                }
+              } else if (mode == 3) {
+                int kx = 20, ky = 180, kw = 100, kh = 30, gap = 10;
+                for (int i = 0; i < 12; i++) {
+                  int col = i % 3;
+                  int row = i / 3;
+                  int x = kx + col * (kw + gap);
+                  int y = ky + row * (kh + gap);
+                  if (tx >= x && tx <= x + kw && ty >= y && ty <= y + kh) {
+                    if (i == 9) {
+                      if (!id(geo_input).empty()) id(geo_input).pop_back();
+                    } else if (i == 11) {
+                      if (!id(geo_input).empty()) {
+                        int gid = atoi(id(geo_input).c_str());
+                        if (gid > 0) {
+                          id(geoname_id) = gid;
+                          id(geoname_idx) = -1;
+                          id(display_mode) = 0;
+                          id(get_jdate).execute();
+                        }
+                        id(geo_input) = "";
+                      }
+                    } else {
+                      const char *digits = "123456789";
+                      if (i < 9) {
+                        id(geo_input) += digits[i];
+                      } else {
+                        id(geo_input) += '0';
+                      }
+                    }
+                    id(need_display_update) = true;
+                    break;
+                  }
+                }
+                if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
+                  id(display_mode) = 0;
+                  id(need_display_update) = true;
+                }
+              } else if (mode == 2) {
+                if (tx >= 40 && tx <= 440 && ty >= 190 && ty <= 230) {
+                  id(display_mode) = 0;
+                  App.safe_reboot();
+                }
+                if (tx >= 0 && tx <= 480 && ty >= 288 && ty <= 320) {
+                  id(display_mode) = 0;
+                  id(need_display_update) = true;
+                }
+              }
+
+              start_x = -1;
+              start_y = -1;
+            }
+          } else {
+            if (start_x < 0) {
+              start_x = cx;
+              start_y = cy;
+              ESP_LOGI("touch", "DOWN x=%d y=%d", cx, cy);
+            }
+          }
