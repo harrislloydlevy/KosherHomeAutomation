@@ -255,18 +255,33 @@ static bool parse_zmanim_response(JsonDocument &doc, const std::string &body) {
 // ============================================================================
 
 // Build the zmanim display string from the zmanim API response.
-// Extracts minchaGedola, plagHaMincha from the API and computes
-// Maariv as sunset + 50 minutes.
-// Returns empty string if required fields are missing.
+// Pulls as many halachic times as available and computes Maariv as
+// sunset + 50 minutes. Returns empty string if core fields are missing.
 static std::string build_zmanim_string(const JsonDocument &doc) {
   const char *mg   = JSON_GET(doc, ["times"]["minchaGedola"]);
   const char *plag = JSON_GET(doc, ["times"]["plagHaMincha"]);
   const char *sun  = JSON_GET(doc, ["times"]["sunset"]);
   if (!mg || !*mg || !plag || !*plag) return "";
-  std::string mincha_s = fmt_time_from_api(mg);
-  std::string plag_s   = fmt_time_from_api(plag);
-  std::string maariv_s = "--:--";
+
+  std::string out;
+  auto add = [&](const char *label, const char *iso) {
+    if (!iso || !*iso) return;
+    std::string t = fmt_time_from_api(iso);
+    if (t == "--:--") return;
+    if (!out.empty()) out += "\n";
+    out += std::string(label) + ": " + t;
+  };
+
+  add("Alos",     JSON_GET(doc, ["times"]["alotHaShachar"]));
+  add("Sunrise",  JSON_GET(doc, ["times"]["sunrise"]));
+  add("Shma",     JSON_GET(doc, ["times"]["sofZmanShma"]));
+  add("Tefilla",  JSON_GET(doc, ["times"]["sofZmanTfilla"]));
+  add("Chatzot",  JSON_GET(doc, ["times"]["chatzot"]));
+  add("MinchaG",  mg);
+  add("MinchaK",  JSON_GET(doc, ["times"]["minchaKetana"]));
+  add("Plag",     plag);
   // Maariv = sunset + 50 min (standard ashkenazi practice)
+  std::string maariv_s = "--:--";
   if (sun && *sun) {
     int h = 0, m = 0;
     if (sscanf(sun, "%*[^T]T%d:%d", &h, &m) >= 2) {
@@ -275,8 +290,14 @@ static std::string build_zmanim_string(const JsonDocument &doc) {
       maariv_s = format_12h(h, m);
     }
   }
-  return str_sprintf("Mincha: %s\nPlag: %s\nMaariv: %s",
-    mincha_s.c_str(), plag_s.c_str(), maariv_s.c_str());
+  if (maariv_s != "--:--") {
+    if (!out.empty()) out += "\n";
+    out += "Maariv: " + maariv_s;
+  }
+  add("Sunset",   sun);
+  add("Tzais",    JSON_GET(doc, ["times"]["tzeit85deg"]));
+
+  return out;
 }
 
 // Extract all display data from the HebCal and zmanim JSON documents.
