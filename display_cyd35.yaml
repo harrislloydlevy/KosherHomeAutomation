@@ -46,7 +46,7 @@ display:
 
         auto t = id(sntp_time).now();
         // Main Shabbos clock — draws from pre-computed g_ globals.
-        render_shabbos(it, id(alef), id(alef_mid), id(alef_hdr), id(mdi),
+        render_shabbos(it, id(alef), id(alef_mid), id(alef_hdr), id(mdi), id(background),
             id(g_hdr),
             id(g_candles_time), id(g_candles_icon),
             id(g_havdalah_time), id(g_havdalah_icon),

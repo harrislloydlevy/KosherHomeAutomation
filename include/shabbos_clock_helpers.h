@@ -713,13 +713,14 @@ static void extract_display_data(
 //   Bot-Left:  Today (Hebrew date, English date, notes, daily study)
 //   Bot-Right: Upcoming events
 // Plus a 28px header bar and 32px footer bar.
-template<typename TDisplay, typename TFont, typename TIconFont>
+template<typename TDisplay, typename TFont, typename TIconFont, typename TImage>
 static void render_shabbos(
     TDisplay &it,
     TFont *font_small,
     TFont *font_mid,
     TFont *font_hdr,
     TIconFont *font_icons,
+    TImage *bg_img,
     const std::string &hdr,
     const std::string &candles_time, const std::string &candles_icon,
     const std::string &havdalah_time, const std::string &havdalah_icon,
@@ -744,8 +745,8 @@ static void render_shabbos(
   auto c_div   = Color(50, 50, 40);
 
   if (!font_small || !font_mid || !font_icons) return;
-  // Background: solid black (image disabled)
-  it.filled_rectangle(0, 0, 480, 320, Color(0, 0, 0));
+  // Background image
+  if (bg_img) it.image(0, 0, bg_img);
 
   // ---- Header bar (full width, 28px) ----
   auto c_dark = Color(0, 0, 0);

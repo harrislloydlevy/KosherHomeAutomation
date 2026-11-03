@@ -39,6 +39,8 @@ binary_sensor:
       mode:
         input: true
         pullup: true
+    on_press:
+      - lambda: 'ESP_LOGI("nav", "Boot button PRESSED");'
     on_click:
       - min_length: 0ms
         max_length: 1000ms
@@ -55,3 +57,5 @@ binary_sensor:
               wifi::global_wifi_component->clear_sta();
               wifi::global_wifi_component->save_wifi_sta("", "");
               App.safe_reboot();
+    on_release:
+      - lambda: 'ESP_LOGI("nav", "Boot button RELEASED");'
