@@ -677,6 +677,7 @@ static void render_shabbos(
     TDisplay &it,
     TFont *font_small,
     TFont *font_mid,
+    TFont *font_hdr,
     TIconFont *font_icons,
     TImage *bg_img,
     const std::string &hdr,
@@ -704,10 +705,11 @@ static void render_shabbos(
   if (bg_img) it.image(0, 0, bg_img);
 
   // ---- Header bar (full width, 28px) ----
-  it.print(240, 6, font_small, c_wht, TextAlign::CENTER, hdr.c_str());
+  auto c_dark = Color(0, 0, 0);
+  it.print(240, 6, font_hdr, c_dark, TextAlign::CENTER, hdr.c_str());
   // Current wall-clock time (top-right of header)
   std::string now_s = format_12h(cur_hour, cur_minute);
-  it.print(472, 6, font_small, c_wht, TextAlign::RIGHT, now_s.c_str());
+  it.print(472, 6, font_hdr, c_dark, TextAlign::RIGHT, now_s.c_str());
 
   // ---- Vertical divider between left/right columns ----
   it.filled_rectangle(190, 28, 1, 260, c_div);
@@ -845,7 +847,7 @@ static void render_shabbos(
   }
 
   // ---- Footer bar (full width, 32px) ----
-  it.print(240, 295, font_small, c_wht, TextAlign::CENTER, "Swipe Left to set location, Swipe Right to setup Wifi");
+  it.print(240, 295, font_hdr, c_dark, TextAlign::CENTER, "Swipe Left to set location, Swipe Right to setup Wifi");
 }
 
 // ============================================================================
