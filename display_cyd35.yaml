@@ -124,9 +124,7 @@ touchscreen:
               ESP_LOGI("touch", "RELEASE x=%d y=%d mode=%d", tx, ty, mode);
 
               if (mode == 0) {
-                // Touch X is mirrored relative to physical layout on this board:
-                // physical left registers as large X. Flip to match user expectation.
-                if (tx >= 240) {
+                if (tx < 240) {
                   id(display_mode) = 1;
                   ESP_LOGI("touch", "Tap left -> Location");
                 } else {
