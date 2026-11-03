@@ -90,7 +90,7 @@ touchscreen:
     spi_id: spi_bus
     cs_pin: GPIO33
     display: main_display
-    threshold: 100
+    threshold: 50
     calibration:
       x_min: 712
       x_max: 3506

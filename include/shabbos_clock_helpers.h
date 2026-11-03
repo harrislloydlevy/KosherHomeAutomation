@@ -981,7 +981,7 @@ static void render_location_screen(
       "1", "2", "3",
       "4", "5", "6",
       "7", "8", "9",
-      "\U000F049A", "0", "\u2714"
+      "\U000F049A", "0", "OK"
     };
     for (int i = 0; i < 12; i++) {
       int col = i % 3;
@@ -995,7 +995,7 @@ static void render_location_screen(
       if (i == 9) {
         it.print(tx - 16, ty + 2, font_icons, c_gold, "\U000F049A");
       } else if (i == 11) {
-        it.print(tx - 8, ty + 2, font_mid, c_gold, "\u2714");
+        it.print(tx - 4, ty + 2, font_mid, c_gold, "OK");
       } else {
         it.print(tx - 6, ty + 2, font_mid, c_wht, keys[i]);
       }
